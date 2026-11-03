@@ -36,7 +36,9 @@ INSERT INTO profiles (id, organisation_id, email, full_name, phone, role, is_act
 VALUES
   ('c1111111-1111-4111-8111-111111111111', '11111111-1111-4111-8111-111111111111', 'james.adebayo@grace.example', 'Pastor James Adebayo', '+233 20 100 0001', 'pastor', TRUE),
   ('c2222222-2222-4222-8222-222222222222', '11111111-1111-4111-8111-111111111111', 'esther.moyo@grace.example', 'Pastor Esther Moyo', '+233 20 100 0002', 'pastor', TRUE),
-  ('c3333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'daniel.okafor@grace.example', 'Pastor Daniel Okafor', '+233 20 100 0003', 'pastor', TRUE)
+  ('c3333333-3333-4333-8333-333333333333', '11111111-1111-4111-8111-111111111111', 'daniel.okafor@grace.example', 'Pastor Daniel Okafor', '+233 20 100 0003', 'pastor', TRUE),
+  ('c4444444-4444-4444-8444-444444444444', '11111111-1111-4111-8111-111111111111', 'ama.mensah@grace.example', 'Ama Mensah', '+233 20 100 0004', 'secretary', TRUE),
+  ('c5555555-5555-4555-8555-555555555555', '11111111-1111-4111-8111-111111111111', 'ruth.owusu@grace.example', 'Ruth Owusu', '+233 20 100 0005', 'church_admin', TRUE)
 ON CONFLICT DO NOTHING;
 
 INSERT INTO pastors (id, organisation_id, profile_id, branch_id, title, is_active)

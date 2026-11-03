@@ -7,8 +7,9 @@ import { MissingPage } from './pages/MissingPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { PastorsPage } from './pages/PastorsPage'
 import { ReportsPage } from './pages/ReportsPage'
+import { reportView } from './auth'
 import { pageTitle } from './route'
-import { clearStaffSession, isReportRole } from './staffSession'
+import { clearStaffSession } from './staffSession'
 import { usePath, navigate } from './usePath'
 import { useStaffSession } from './useStaffSession'
 
@@ -24,7 +25,7 @@ function App() {
   const path = usePath()
   const session = useStaffSession()
   const Page = pages[path as keyof typeof pages]
-  const showReports = path !== '/login' && isReportRole(session?.role)
+  const showReports = path !== '/login' && reportView(session?.role) !== null
 
   useEffect(() => {
     const title = pageTitle(path)
@@ -51,16 +52,19 @@ function App() {
         </nav>
 
         {session ? (
-          <button
-            type="button"
-            className="secondary-button"
-            onClick={() => {
-              clearStaffSession()
-              if (path === '/reports') navigate('/')
-            }}
-          >
-            Log out
-          </button>
+          <div className="session-box">
+            <span>{session.name}</span>
+            <button
+              type="button"
+              className="secondary-button"
+              onClick={() => {
+                clearStaffSession()
+                if (path === '/reports') navigate('/')
+              }}
+            >
+              Log out
+            </button>
+          </div>
         ) : (
           <AppLink className="primary-button" to="/login">
             Log in

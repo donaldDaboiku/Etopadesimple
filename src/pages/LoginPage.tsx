@@ -1,38 +1,45 @@
 import { useState, type FormEvent } from 'react'
+import { LOCAL_STAFF_PASSWORD, authenticate, reportView } from '../auth'
 import { Field } from '../Field'
-import { writeStaffSession, type StaffRole } from '../staffSession'
+import { writeStaffSession } from '../staffSession'
 import { navigate } from '../usePath'
 import { validateSignIn } from '../validation'
 
 export function LoginPage() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
-  const [role, setRole] = useState('')
-  const [errors, setErrors] = useState<{ email?: string; password?: string; role?: string }>({})
+  const [errors, setErrors] = useState<{ email?: string; password?: string }>({})
+  const [formError, setFormError] = useState('')
 
   function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const nextErrors = validateSignIn(email, password, role)
+    const nextErrors = validateSignIn(email, password)
     setErrors(nextErrors)
-    if (nextErrors.email || nextErrors.password || nextErrors.role) return
-    writeStaffSession({ email: email.trim(), role: role as StaffRole })
+    setFormError('')
+    if (nextErrors.email || nextErrors.password) return
+    const account = authenticate(email, password)
+    if (!account) {
+      setFormError('Email or password is not recognised.')
+      return
+    }
+    writeStaffSession({ email: account.email, name: account.name, role: account.role })
     setPassword('')
-    navigate('/reports')
+    navigate(reportView(account.role) ? '/reports' : '/')
   }
 
   return (
     <section className="card login-card">
       <p className="eyebrow-small">Staff access</p>
       <h1>Log in</h1>
-      <p className="auth-copy">Sign in as a pastor or a secretary. Reports open after that role is accepted.</p>
+      <p className="auth-copy">
+        Sign in with your staff email. A pastor opens their own report. A secretary opens the church report.
+      </p>
       <form className="stack-form" onSubmit={submit} noValidate>
-        <Field id="sign-in-role" label="Role" error={errors.role}>
-          <select value={role} onChange={(event) => setRole(event.target.value)}>
-            <option value="">Choose a role</option>
-            <option value="pastor">Pastor</option>
-            <option value="secretary">Secretary</option>
-          </select>
-        </Field>
+        {formError ? (
+          <p className="auth-message error" role="alert">
+            {formError}
+          </p>
+        ) : null}
         <Field id="sign-in-email" label="Email address" error={errors.email}>
           <input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} />
         </Field>
@@ -48,6 +55,9 @@ export function LoginPage() {
           Continue
         </button>
       </form>
+      <p className="auth-copy demo-note">
+        Local password: {LOCAL_STAFF_PASSWORD}. Pastor: james.adebayo@grace.example. Secretary: ama.mensah@grace.example.
+      </p>
     </section>
   )
 }

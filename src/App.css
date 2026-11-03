@@ -71,6 +71,22 @@
   box-shadow: inset 0 -2px 0 #9a7a2f;
 }
 
+.session-box {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.session-box span {
+  font-weight: 700;
+  color: #102b4d;
+}
+
+.demo-note {
+  margin-top: 18px;
+  font-size: 0.92rem;
+}
+
 .primary-button,
 .secondary-button,
 .slot-button {

@@ -29,8 +29,20 @@ Status: complete
 - Added a seed dataset for a starter church organisation and default booking settings.
 - Added migration files in `supabase/migrations` and a readable schema reference in `supabase/schema.sql`.
 
+## Phase 3 – Authentication and role-based access
+
+Status: complete
+
+### Completed
+
+- Staff sign-in checks the church directory instead of letting a visitor choose a role.
+- Pastors see their own report. Secretaries and church administrators see the church-wide report.
+- Reports stay hidden on the public pages and on the login page.
+- A secretary and a church administrator were added to the seed data.
+
 ### Next work
 
-- Phase 3: implement authentication and role-based access control flows.
-- Phase 4: public booking portal UI and form validation.
-- Phase 5-10: dashboards, notifications, availability logic, reports, testing, and deployment.
+- Phase 4: connect the public booking portal to the database.
+- Phase 5-10: dashboards, notifications, availability logic, live reports, testing, and deployment.
+
+The local password is a stand-in until Supabase Auth is connected. It does not replace row-level security.

@@ -1,23 +1,20 @@
-export type StaffRole = 'pastor' | 'secretary'
+import { isStaffRole, type StaffRole } from './auth'
 
 export type StaffSession = {
   email: string
+  name: string
   role: StaffRole
 }
 
 const KEY = 'etopade.staff.session'
-
-export function isReportRole(role: string | null | undefined): role is StaffRole {
-  return role === 'pastor' || role === 'secretary'
-}
 
 export function readStaffSession(): StaffSession | null {
   try {
     const raw = sessionStorage.getItem(KEY)
     if (!raw) return null
     const parsed = JSON.parse(raw) as Partial<StaffSession>
-    if (typeof parsed.email !== 'string' || !isReportRole(parsed.role)) return null
-    return { email: parsed.email, role: parsed.role }
+    if (typeof parsed.email !== 'string' || typeof parsed.name !== 'string' || !isStaffRole(parsed.role)) return null
+    return { email: parsed.email, name: parsed.name, role: parsed.role }
   } catch {
     return null
   }

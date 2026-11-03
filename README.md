@@ -17,7 +17,7 @@ This project is being built in phased increments to support a public booking por
 
 ## Current phase
 
-Phase 2 is complete. The project now includes a production-oriented schema and migration set under `supabase/migrations`, plus a schema reference in `supabase/schema.sql`.
+Phase 3 is complete. Staff sign in against the church directory, and reports follow the signed-in role. The schema and migrations remain under `supabase/migrations`.
 
 ## Local development
 

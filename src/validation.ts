@@ -128,10 +128,9 @@ export function validateBooking(draft: BookingDraft, now = new Date(), taken: st
   return errors
 }
 
-export function validateSignIn(email: string, password: string, role: string) {
-  const errors: { email?: string; password?: string; role?: string } = {}
+export function validateSignIn(email: string, password: string) {
+  const errors: { email?: string; password?: string } = {}
   if (!emailPattern.test(email.trim()) || email.trim().length > 254) errors.email = 'Enter a valid email address.'
   if (password.length < 8) errors.password = 'Use at least 8 characters.'
-  if (role !== 'pastor' && role !== 'secretary') errors.role = 'Choose pastor or secretary.'
   return errors
 }

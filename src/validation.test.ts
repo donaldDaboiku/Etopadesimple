@@ -46,11 +46,9 @@ test('rejects a slot already requested for the same pastor', () => {
   assert.equal(errors.slot, 'That time is already requested for this pastor.')
 })
 
-test('sign-in is limited to a pastor or a secretary', () => {
-  assert.deepEqual(validateSignIn('pastor@grace.example', 'correct-horse', 'pastor'), {})
-  assert.deepEqual(validateSignIn('office@grace.example', 'correct-horse', 'secretary'), {})
-  const errors = validateSignIn('pastor', 'short', 'visitor')
+test('sign-in checks email and password shape', () => {
+  assert.deepEqual(validateSignIn('pastor@grace.example', 'correct-horse'), {})
+  const errors = validateSignIn('pastor', 'short')
   assert.ok(errors.email)
   assert.ok(errors.password)
-  assert.equal(errors.role, 'Choose pastor or secretary.')
 })
