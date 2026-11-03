@@ -1,28 +1,7 @@
-import { reportView, roleLabels } from '../auth'
+import { reportView, roleLabels, staffDirectory } from '../auth'
 import { AppLink } from '../AppLink'
+import { countBookings, describeBooking, readBookings } from '../bookings'
 import { useStaffSession } from '../useStaffSession'
-
-const ownReport = {
-  title: 'Your appointments',
-  summary: 'This report covers the appointments assigned to you.',
-  metrics: [
-    { label: 'Your appointments today', value: '12', tone: 'navy' },
-    { label: 'Waiting on you', value: '4', tone: 'gold' },
-    { label: 'Your follow-ups', value: '2', tone: 'green' },
-    { label: 'Your no-shows', value: '1', tone: 'rose' },
-  ],
-}
-
-const churchReport = {
-  title: 'Church appointments',
-  summary: 'This report covers appointments for every pastor in the church.',
-  metrics: [
-    { label: 'Church appointments', value: '1,284', tone: 'navy' },
-    { label: 'Pending approvals', value: '38', tone: 'gold' },
-    { label: 'Confirmations', value: '92%', tone: 'green' },
-    { label: 'No-shows', value: '4', tone: 'rose' },
-  ],
-}
 
 export function ReportsPage() {
   const session = useStaffSession()
@@ -40,21 +19,52 @@ export function ReportsPage() {
     )
   }
 
-  const report = view === 'own' ? ownReport : churchReport
+  const account = staffDirectory.find((item) => item.email === session.email)
+  const records = readBookings()
+  const mine = view === 'own' ? records.filter((record) => record.pastor_id === account?.pastorId) : records
+  const counts = countBookings(records, view === 'own' ? account?.pastorId : null)
+  const recent = [...mine].reverse().slice(0, 8)
+  const metrics = [
+    { label: view === 'own' ? 'Your requests' : 'Church requests', value: String(counts.total), tone: 'navy' },
+    { label: 'Pending', value: String(counts.pending), tone: 'gold' },
+    { label: 'Scheduled today', value: String(counts.today), tone: 'green' },
+  ]
+
   return (
     <>
       <header className="page-heading">
         <p className="eyebrow">{roleLabels[session.role]}</p>
-        <h1>{report.title}</h1>
-        <p className="auth-copy">{report.summary}</p>
+        <h1>{view === 'own' ? 'Your appointments' : 'Church appointments'}</h1>
+        <p className="auth-copy">
+          {view === 'own'
+            ? 'Pending requests assigned to you.'
+            : 'Pending requests for every pastor in the church.'}
+        </p>
       </header>
-      <section className="stats-grid" aria-label="Operational metrics">
-        {report.metrics.map((metric) => (
+      <section className="stats-grid" aria-label="Booking totals">
+        {metrics.map((metric) => (
           <article key={metric.label} className={`stat-card ${metric.tone}`}>
             <span>{metric.label}</span>
             <strong>{metric.value}</strong>
           </article>
         ))}
+      </section>
+      <section className="card audit-panel report-list">
+        <h2>Recent requests</h2>
+        {recent.length === 0 ? (
+          <p className="auth-copy">No booking requests yet.</p>
+        ) : (
+          <ul className="audit-list">
+            {recent.map((record) => {
+              const details = describeBooking(record)
+              return (
+                <li key={record.id}>
+                  {record.booking_reference} · {record.visitor_name} · {details.pastor} · {details.when}
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </section>
     </>
   )

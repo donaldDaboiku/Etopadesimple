@@ -40,9 +40,19 @@ Status: complete
 - Reports stay hidden on the public pages and on the login page.
 - A secretary and a church administrator were added to the seed data.
 
+## Phase 4 – Public booking portal
+
+Status: complete
+
+### Completed
+
+- A public request is stored as a pending booking row for Grace Fellowship, with pastor, category, visitor, and time.
+- The same pastor and time cannot be stored twice.
+- Pastor and secretary reports read those rows instead of sample figures.
+
 ### Next work
 
-- Phase 4: connect the public booking portal to the database.
-- Phase 5-10: dashboards, notifications, availability logic, live reports, testing, and deployment.
+- Phase 5: pastor dashboard.
+- Phase 6-10: administrator tools, availability, notifications, deployment.
 
-The local password is a stand-in until Supabase Auth is connected. It does not replace row-level security.
+Bookings are stored on this device until a Supabase project is connected. The row matches the `bookings` table. The local password is still a stand-in until Supabase Auth is connected.

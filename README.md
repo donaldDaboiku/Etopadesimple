@@ -17,7 +17,7 @@ This project is being built in phased increments to support a public booking por
 
 ## Current phase
 
-Phase 3 is complete. Staff sign in against the church directory, and reports follow the signed-in role. The schema and migrations remain under `supabase/migrations`.
+Phase 4 is complete. Public booking requests are stored as pending rows, and staff reports read those rows. The schema and migrations remain under `supabase/migrations`.
 
 ## Local development
 

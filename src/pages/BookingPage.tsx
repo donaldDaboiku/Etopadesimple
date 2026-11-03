@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react'
+import { activeSlotKeys, commitBooking, describeBooking, readBookings } from '../bookings'
 import { Field } from '../Field'
 import {
   SLOT_TIMES,
@@ -13,7 +14,6 @@ import {
 } from '../validation'
 
 const DRAFT_KEY = 'etopade.booking.draft'
-const TAKEN_KEY = 'etopade.booking.taken'
 const SESSION_KEY = 'etopade.booking.session'
 const fieldOrder: (keyof BookingDraft)[] = [
   'pastorId',
@@ -31,8 +31,8 @@ const fieldOrder: (keyof BookingDraft)[] = [
 
 const findings = [
   'Name, email, phone, notice period, and the 90-day window are checked before submit.',
-  'A time already requested for the same pastor and date is rejected in this browser.',
-  'The database rejects past appointments and a second active booking on the same slot.',
+  'A pending booking already stored for that pastor and time is rejected.',
+  'Each accepted request is stored as a pending booking for Grace Fellowship.',
   'Visitors can request a booking without reading private appointment records.',
 ]
 
@@ -99,31 +99,10 @@ function storeSession(value: SessionForm) {
   }
 }
 
-function readTaken() {
-  try {
-    const raw = localStorage.getItem(TAKEN_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed.filter((item): item is string => typeof item === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-function rememberTaken(key: string, current: string[]) {
-  const next = current.includes(key) ? current : [...current, key]
-  localStorage.setItem(TAKEN_KEY, JSON.stringify(next))
-  return next
-}
-
-function bookingReference() {
-  const bytes = crypto.getRandomValues(new Uint8Array(6))
-  return Array.from(bytes, (byte) => byte.toString(16).padStart(2, '0')).join('').toUpperCase()
-}
-
 export function BookingPage() {
   const [session, setSession] = useState<SessionForm>(readSession)
   const [errors, setErrors] = useState<BookingErrors>({})
-  const [taken, setTaken] = useState<string[]>(readTaken)
+  const [taken, setTaken] = useState<string[]>(() => activeSlotKeys(readBookings()))
   const [{ today, maxDate }] = useState(() => {
     const now = new Date()
     const latest = new Date(now)
@@ -158,15 +137,24 @@ export function BookingPage() {
       return
     }
 
+    const saved = commitBooking(draft)
+    setTaken(activeSlotKeys(readBookings()))
+    if ('error' in saved) {
+      setErrors({ slot: 'That time is already requested for this pastor.' })
+      document.getElementById('field-slot')?.focus()
+      return
+    }
     const pastor = pastors.find((item) => item.id === draft.pastorId)?.name ?? 'Pastor'
     const category = appointmentTypes.find((item) => item.id === draft.appointmentTypeId)?.name ?? 'Appointment'
-    const reference = bookingReference()
-    // ponytail: remembered in this browser only. The database exclusion constraint is the real lock once Supabase is connected.
-    setTaken(rememberTaken(slotKey(draft.pastorId, draft.date, draft.slot), taken))
     localStorage.removeItem(DRAFT_KEY)
     saveSession({
       draft: { ...draft, slot: '', notes: '' },
-      confirmation: { reference, pastor, category, when: `${draft.date} at ${draft.slot}` },
+      confirmation: {
+        reference: saved.record.booking_reference,
+        pastor,
+        category,
+        when: describeBooking(saved.record).when,
+      },
       notice: '',
     })
   }
@@ -184,8 +172,7 @@ export function BookingPage() {
 
         {confirmation ? (
           <p className="form-banner success" role="status">
-            Request {confirmation.reference} saved for {confirmation.pastor}, {confirmation.category}, on {confirmation.when}.
-            It stays on this device until the church connects the booking service.
+            Request {confirmation.reference} is pending for {confirmation.pastor}, {confirmation.category}, on {confirmation.when}.
           </p>
         ) : null}
         {notice ? (
@@ -340,9 +327,9 @@ export function BookingPage() {
         <div className="next-steps">
           <h3>Next milestones</h3>
           <ul>
-            <li>Authentication and role-based access</li>
             <li>Pastor and administrator dashboards</li>
-            <li>Live availability from the database</li>
+            <li>Notifications</li>
+            <li>Sync these rows to Supabase</li>
           </ul>
         </div>
       </aside>

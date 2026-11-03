@@ -7,6 +7,7 @@ export type StaffAccount = {
   name: string
   role: StaffRole
   profileId: string
+  pastorId: string | null
 }
 
 export const roleLabels: Record<StaffRole, string> = {
@@ -27,30 +28,35 @@ export const staffDirectory: StaffAccount[] = [
     name: 'Pastor James Adebayo',
     role: 'pastor',
     profileId: 'c1111111-1111-4111-8111-111111111111',
+    pastorId: 'd1111111-1111-4111-8111-111111111111',
   },
   {
     email: 'esther.moyo@grace.example',
     name: 'Pastor Esther Moyo',
     role: 'pastor',
     profileId: 'c2222222-2222-4222-8222-222222222222',
+    pastorId: 'd2222222-2222-4222-8222-222222222222',
   },
   {
     email: 'daniel.okafor@grace.example',
     name: 'Pastor Daniel Okafor',
     role: 'pastor',
     profileId: 'c3333333-3333-4333-8333-333333333333',
+    pastorId: 'd3333333-3333-4333-8333-333333333333',
   },
   {
     email: 'ama.mensah@grace.example',
     name: 'Ama Mensah',
     role: 'secretary',
     profileId: 'c4444444-4444-4444-8444-444444444444',
+    pastorId: null,
   },
   {
     email: 'ruth.owusu@grace.example',
     name: 'Ruth Owusu',
     role: 'church_admin',
     profileId: 'c5555555-5555-4555-8555-555555555555',
+    pastorId: null,
   },
 ]
 

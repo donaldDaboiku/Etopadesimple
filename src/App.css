@@ -460,6 +460,10 @@ textarea:focus {
   margin-bottom: 18px;
 }
 
+.report-list {
+  margin-top: 24px;
+}
+
 .pastor-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
