@@ -5,6 +5,22 @@
   color: #1c2e46;
 }
 
+.site-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 28px;
+  padding: 16px 4px 0;
+  border-top: 1px solid rgba(16, 43, 77, 0.12);
+  color: #5a6e85;
+  font-size: 0.85rem;
+}
+
+.site-footer a {
+  color: #102b4d;
+  font-weight: 600;
+}
+
 .topbar {
   display: flex;
   align-items: center;
@@ -753,7 +769,8 @@ textarea {
     padding-top: 12px;
   }
 
-  .topbar {
+  .topbar,
+  .site-footer {
     flex-wrap: wrap;
     justify-content: center;
   }

@@ -16,7 +16,7 @@ This project is being built in phased increments to support a public booking por
 
 ## Current phase
 
-Phase 10 validation is complete. Tests, lint, and the production build pass, and Hosting is set up for the single-page app. The app is not deployed. Local development uses the Firebase emulators. A dedicated Firebase project is required before deploy. The signed-in Google account’s existing Firebase project is a different app, so ETOPADE is not deployed there.
+Phase 10 validation is complete, and the production web config points at Firebase project `etopade`. The app is not deployed yet. The Firebase CLI is signed in as an account that cannot manage `etopade`. Local development still uses the emulators. The other project on that account is a different app and is not used.
 
 ## Local development
 
@@ -45,14 +45,14 @@ Vite reads the Firebase web config at build time. A build without `VITE_FIREBASE
 
 ## Deploy
 
-Copy `.env.example` to `.env` and fill in the web config for a dedicated Firebase project. Then build and deploy Hosting and the Firestore rules to that project:
+The production values live in `.env.production.local`, which is not committed. Local `npm run dev` does not load that file, so it stays on the emulators. Build and deploy only after the CLI account can manage `etopade`:
 
 ```bash
 npm run build
-npx -y firebase-tools@latest deploy --only hosting,firestore:rules --project <project-id>
+npx -y firebase-tools@latest deploy --only hosting,firestore:rules,auth --project etopade
 ```
 
-Do not deploy to `etopade-demo`. That id exists only for the emulators. After the first deploy, enable Google sign-in for the project and add the Hosting domain to the authorized domains.
+Do not deploy to `etopade-demo` or to any other Firebase project. `etopade-demo` exists only for the emulators.
 
 ## Security notes
 

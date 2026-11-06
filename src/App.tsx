@@ -76,6 +76,15 @@ function App() {
       </header>
 
       <main className="page">{Page ? <Page /> : <MissingPage />}</main>
+      <footer className="site-footer">
+        <span>© 2026 ETOPADE</span>
+        <span>
+          Built by{' '}
+          <a href="https://gitsystemng.com" target="_blank" rel="noopener noreferrer">
+            gitsystemng.com
+          </a>
+        </span>
+      </footer>
     </div>
   )
 }

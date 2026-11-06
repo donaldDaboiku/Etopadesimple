@@ -1,5 +1,6 @@
 {
   "projects": {
-    "default": "etopade-demo"
+    "default": "etopade-demo",
+    "production": "etopade"
   }
 }

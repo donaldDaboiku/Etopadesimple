@@ -104,16 +104,16 @@ Status: complete
 
 ## Phase 10 – Validation and deployment
 
-Status: validation complete, deployment waiting on a project
+Status: validation complete, deployment blocked on project access
 
 ### Completed
 
 - Tests, lint, and the production build pass.
 - Firebase Hosting is configured to serve the built app and send every address to `index.html`.
-- A cloud deploy needs a dedicated Firebase project. The local id `etopade-demo` is only for emulators. The signed-in Google account’s existing project is a different app and is not used.
+- The production web config is stored for Firebase project `etopade`. Local development still uses the emulators.
 
 ### Next work
 
-- Create or choose a dedicated Firebase project, then build with that project’s web config and deploy Hosting, Auth, and Firestore rules.
+- Sign the Firebase CLI into the Google account that owns `etopade`, or grant the current CLI account access. Then deploy Hosting, Auth, and Firestore rules to `etopade` only.
 
 Local development uses the Firebase emulators under the project id `etopade-demo`. Prototype security rules are in `firestore.rules` and should be reviewed before the app is shared widely.
