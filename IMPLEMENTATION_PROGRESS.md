@@ -104,16 +104,18 @@ Status: complete
 
 ## Phase 10 – Validation and deployment
 
-Status: validation complete, deployment blocked on project access
+Status: deployed to `etopade`
 
 ### Completed
 
 - Tests, lint, and the production build pass.
-- Firebase Hosting is configured to serve the built app and send every address to `index.html`.
-- The production web config is stored for Firebase project `etopade`. Local development still uses the emulators.
+- Firebase Hosting, email/password Auth, and Firestore rules are released to `etopade`.
+- The public site is https://etopade.web.app.
+- The login page and the client bundle do not contain a super admin password.
+- Firestore rules no longer let a signed-in person create their own super admin record. `npm run bootstrap` creates that account with the Admin SDK.
 
 ### Next work
 
-- Sign the Firebase CLI into the Google account that owns `etopade`, or grant the current CLI account access. Then deploy Hosting, Auth, and Firestore rules to `etopade` only.
+- Create a service account for `etopade`, then run `npm run bootstrap` with a private super admin email and password. Until that account exists, the live site has no staff login.
 
-Local development uses the Firebase emulators under the project id `etopade-demo`. Prototype security rules are in `firestore.rules` and should be reviewed before the app is shared widely.
+Local development uses the Firebase emulators under the project id `etopade-demo`. The emulator seed signs in as `superadmin@etopade.local` / `etopade-admin`.

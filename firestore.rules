@@ -379,22 +379,11 @@ service cloud.firestore {
 
       match /members/{emailKey} {
         allow read: if isAdmin() || (isAuthenticated() && emailKey == emailId());
-        allow create: if (
-            isAdmin()
-            && isValidMember(request.resource.data, emailKey)
-            && request.resource.data.status == 'invited'
-            && request.resource.data.uid == null
-            && request.resource.data.role in ['pastor', 'assistant_pastor', 'secretary', 'church_admin']
-          ) || (
-            emailKey == 'superadmin@etopade.local'
-            && isAuthenticated()
-            && emailId() == emailKey
-            && isValidMember(request.resource.data, emailKey)
-            && request.resource.data.role == 'super_admin'
-            && request.resource.data.status == 'active'
-            && request.resource.data.uid == request.auth.uid
-            && request.resource.data.name == 'Super admin'
-          );
+        allow create: if isAdmin()
+          && isValidMember(request.resource.data, emailKey)
+          && request.resource.data.status == 'invited'
+          && request.resource.data.uid == null
+          && request.resource.data.role in ['pastor', 'assistant_pastor', 'secretary', 'church_admin'];
         allow update: if isAuthenticated()
           && emailKey == emailId()
           && resource.data.uid == null

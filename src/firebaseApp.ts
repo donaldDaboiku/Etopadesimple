@@ -7,11 +7,10 @@ import {
   signOut,
 } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
-import { SUPER_ADMIN, isSuperAdminEmail } from './superAdmin.ts'
 
 const projectId = import.meta.env?.VITE_FIREBASE_PROJECT_ID || 'etopade-demo'
 const useCloud = Boolean(import.meta.env?.VITE_FIREBASE_PROJECT_ID)
-// localhost and 127.0.0.1 are different sites. The Auth emulator popup can only see the app's helper frame when both use the same host.
+// localhost and 127.0.0.1 are different sites, so the emulator host follows the page.
 const emulatorHost = globalThis.location?.hostname === '127.0.0.1' ? '127.0.0.1' : 'localhost'
 
 export const firebaseApp = initializeApp({
@@ -40,21 +39,10 @@ function authCode(error: unknown) {
 }
 
 export async function signInWithPassword(email: string, password: string) {
-  const key = email.trim().toLowerCase()
-  try {
-    await signInWithEmailAndPassword(auth, key, password)
-  } catch (error) {
-    if (!isSuperAdminEmail(key) || password !== SUPER_ADMIN.password) throw error
-    try {
-      await createUserWithEmailAndPassword(auth, key, password)
-    } catch (createError) {
-      if (authCode(createError) === 'auth/email-already-in-use') throw error
-      throw createError
-    }
-  }
+  await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
 }
 
-export async function createPasswordAccount(email: string, password: string) {
+function secondaryStaffAuth() {
   const name = 'staff-create'
   const secondary = getApps().find((app) => app.name === name) ?? initializeApp(firebaseApp.options, name)
   const secondaryAuth = getAuth(secondary)
@@ -65,6 +53,22 @@ export async function createPasswordAccount(email: string, password: string) {
       // The secondary app is already pointed at the emulator.
     }
   }
-  await createUserWithEmailAndPassword(secondaryAuth, email.trim().toLowerCase(), password)
-  await signOut(secondaryAuth)
+  return secondaryAuth
+}
+
+export async function createPasswordAccount(email: string, password: string) {
+  const secondaryAuth = secondaryStaffAuth()
+  const key = email.trim().toLowerCase()
+  let opened = false
+  try {
+    try {
+      await createUserWithEmailAndPassword(secondaryAuth, key, password)
+    } catch (error) {
+      if (authCode(error) !== 'auth/email-already-in-use') throw error
+      await signInWithEmailAndPassword(secondaryAuth, key, password)
+    }
+    opened = true
+  } finally {
+    if (opened) await signOut(secondaryAuth)
+  }
 }

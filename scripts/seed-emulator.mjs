@@ -1,10 +1,19 @@
 import { initializeApp } from 'firebase-admin/app'
+import { getAuth } from 'firebase-admin/auth'
 import { getFirestore } from 'firebase-admin/firestore'
 
 process.env.FIRESTORE_EMULATOR_HOST = process.env.FIRESTORE_EMULATOR_HOST || '127.0.0.1:8088'
+process.env.FIREBASE_AUTH_EMULATOR_HOST = process.env.FIREBASE_AUTH_EMULATOR_HOST || '127.0.0.1:9099'
 
 initializeApp({ projectId: 'etopade-demo' })
 const db = getFirestore()
+const auth = getAuth()
+
+const localSuperAdmin = {
+  email: 'superadmin@etopade.local',
+  password: 'etopade-admin',
+  name: 'Super admin',
+}
 
 const pastors = [
   { id: 'd1111111-1111-4111-8111-111111111111', name: 'Pastor James Adebayo', email: 'james.adebayo@grace.example' },
@@ -61,13 +70,26 @@ await createIfMissing(org.collection('members').doc('ruth.owusu@grace.example'),
   status: 'invited',
 })
 
-await createIfMissing(org.collection('members').doc('superadmin@etopade.local'), {
-  email: 'superadmin@etopade.local',
-  name: 'Super admin',
+await createIfMissing(org.collection('members').doc(localSuperAdmin.email), {
+  email: localSuperAdmin.email,
+  name: localSuperAdmin.name,
   role: 'super_admin',
   pastorId: null,
   uid: null,
   status: 'invited',
 })
 
+try {
+  await auth.getUserByEmail(localSuperAdmin.email)
+} catch (error) {
+  if (error?.code !== 'auth/user-not-found') throw error
+  await auth.createUser({
+    email: localSuperAdmin.email,
+    password: localSuperAdmin.password,
+    displayName: localSuperAdmin.name,
+    emailVerified: true,
+  })
+}
+
 console.log('Seeded Grace Fellowship in the Firebase emulator.')
+console.log(`Local super admin: ${localSuperAdmin.email} / ${localSuperAdmin.password}`)

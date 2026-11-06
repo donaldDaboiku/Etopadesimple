@@ -17,7 +17,6 @@ import type { StaffAccount, StaffRole } from './auth.ts'
 import { isStaffRole } from './auth.ts'
 import { BRANCH_ID, buildBooking, holdDocumentId, ORGANISATION_ID, type BookingRecord } from './bookings.ts'
 import { auth, createPasswordAccount, db } from './firebaseApp.ts'
-import { SUPER_ADMIN, isSuperAdminEmail } from './superAdmin.ts'
 import { noticeDocumentId, type NoticeKind, type NoticeScope } from './notices.ts'
 import { auditDocumentId, type AuditAction } from './reports.ts'
 import { staffEmailKey, validateStaffInvite, type StaffInvite } from './staff.ts'
@@ -326,23 +325,7 @@ export async function loadAccount(user: User): Promise<StaffAccount | null> {
   if (!email) return null
   const memberRef = doc(db, 'organisations', CHURCH_ID, 'members', email)
   const snap = await getDoc(memberRef)
-  if (!snap.exists()) {
-    if (!isSuperAdminEmail(email)) return null
-    try {
-      await setDoc(memberRef, {
-        email,
-        name: SUPER_ADMIN.name,
-        role: 'super_admin',
-        pastorId: null,
-        uid: user.uid,
-        status: 'active',
-      })
-    } catch {
-      const again = await getDoc(memberRef)
-      if (!again.exists() || again.data().uid !== user.uid) return null
-    }
-    return { email, name: SUPER_ADMIN.name, role: 'super_admin', pastorId: null }
-  }
+  if (!snap.exists()) return null
   const data = snap.data()
   if (!isStaffRole(data.role)) return null
   if (data.uid == null) {
@@ -392,8 +375,13 @@ export async function createStaff(invite: StaffInvite) {
     await createPasswordAccount(email, invite.password)
   } catch (error) {
     const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
-    if (code !== 'auth/email-already-in-use') return { error: 'invalid' as const }
+    if (code === 'auth/email-already-in-use' || code === 'auth/invalid-credential' || code === 'auth/wrong-password') {
+      return { error: 'exists' as const }
+    }
+    return { error: 'invalid' as const }
   }
+  // ponytail: two creates with the same password can both pass this read. The second member write is rejected by the rules; an extra pastor doc can remain. Upgrade path: reserve the member id before writing the pastor.
+  if ((await getDoc(memberRef)).exists()) return { error: 'exists' as const }
   const pastorId = invite.role === 'pastor' ? crypto.randomUUID() : null
   if (pastorId) {
     await setDoc(doc(db, 'organisations', CHURCH_ID, 'pastors', pastorId), {

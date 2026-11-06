@@ -16,7 +16,7 @@ This project is being built in phased increments to support a public booking por
 
 ## Current phase
 
-Phase 10 validation is complete, and the production web config points at Firebase project `etopade`. The app is not deployed yet. The Firebase CLI is signed in as an account that cannot manage `etopade`. Local development still uses the emulators. The other project on that account is a different app and is not used.
+Phase 10 is deployed to Firebase project `etopade` at https://etopade.web.app. The website does not contain a super admin password. Local development still uses the emulators. The first cloud super admin is created with `npm run bootstrap` after you add a service account for `etopade`.
 
 ## Local development
 
@@ -32,7 +32,7 @@ npm run emulators
 npm run seed
 ```
 
-Run the app with `npm run dev` in a second terminal. The emulators use the local project id `etopade-demo`. To use a dedicated cloud project later, set `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, and `VITE_FIREBASE_APP_ID`.
+Run the app with `npm run dev` in a second terminal. The emulators use the local project id `etopade-demo`. The seed creates the local super admin `superadmin@etopade.local` with password `etopade-admin`. That password is for the emulator only.
 
 ## Production build
 
@@ -45,19 +45,31 @@ Vite reads the Firebase web config at build time. A build without `VITE_FIREBASE
 
 ## Deploy
 
-The production values live in `.env.production.local`, which is not committed. Local `npm run dev` does not load that file, so it stays on the emulators. Build and deploy only after the CLI account can manage `etopade`:
+The production values live in `.env.production.local`, which is not committed. Local `npm run dev` does not load that file, so it stays on the emulators. Sign the CLI into the Google account that owns `etopade`, then build and deploy only that project:
 
 ```bash
+npx -y firebase-tools@latest login:add donalddaboiku@gmail.com
 npm run build
 npx -y firebase-tools@latest deploy --only hosting,firestore:rules,auth --project etopade
 ```
+
+Create the first super admin after Auth and Firestore are deployed. Use a real email and a password that is not committed:
+
+```bash
+$env:SUPER_ADMIN_EMAIL = 'you@example.com'
+$env:SUPER_ADMIN_PASSWORD = 'a-private-password'
+$env:GOOGLE_APPLICATION_CREDENTIALS = 'C:\path\to\etopade-admin.json'
+npm run bootstrap
+```
+
+`GOOGLE_APPLICATION_CREDENTIALS` is a Firebase service account JSON for `etopade`. The script refuses `etopade-demo` and any other project. It creates the Auth user and the super admin directory row when they are missing, and it does not print the password.
 
 Do not deploy to `etopade-demo` or to any other Firebase project. `etopade-demo` exists only for the emulators.
 
 ## Security notes
 
-- Never expose a Firebase admin credential in frontend code.
-- The prototype security rules in `firestore.rules` need review before the app is shared widely.
+- Never expose a Firebase admin credential or the super admin password in frontend code.
+- A signed-in person cannot create their own super admin record. The first super admin is created by `npm run bootstrap`.
 - A public visitor can create a pending booking and can read pastor names, taken times, and each pastor’s open days. Visitor details stay on the booking document.
 - A pastor can read and update only their own bookings.
 - Notifications are not public. A pastor reads notices for their own requests. A secretary or church administrator reads the church office notices.

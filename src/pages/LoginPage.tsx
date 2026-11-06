@@ -1,7 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { isStaffRole } from '../auth'
 import { signInWithPassword } from '../firebaseApp'
-import { SUPER_ADMIN } from '../superAdmin'
 import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
 
@@ -58,9 +57,6 @@ export function LoginPage() {
           Log in
         </button>
       </form>
-      <p className="auth-copy demo-note">
-        Super admin: {SUPER_ADMIN.email} / {SUPER_ADMIN.password}
-      </p>
     </section>
   )
 }

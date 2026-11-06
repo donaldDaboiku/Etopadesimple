@@ -10,7 +10,8 @@
     "test": "node --experimental-strip-types --test src/*.test.ts",
     "preview": "vite preview",
     "emulators": "npx -y firebase-tools@latest emulators:start --project etopade-demo",
-    "seed": "node scripts/seed-emulator.mjs"
+    "seed": "node scripts/seed-emulator.mjs",
+    "bootstrap": "node scripts/bootstrap-admin.mjs"
   },
   "dependencies": {
     "firebase": "^13.2.0",
