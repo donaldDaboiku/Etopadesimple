@@ -6,10 +6,11 @@
   },
   "auth": {
     "providers": {
-      "googleSignIn": {
-        "oAuthBrandDisplayName": "ETOPADE",
-        "supportEmail": "donalddaboiku@gmail.com"
-      }
+        "googleSignIn": {
+          "oAuthBrandDisplayName": "ETOPADE",
+          "supportEmail": "donalddaboiku@gmail.com"
+        },
+        "emailPassword": true
     },
     "authorizedDomains": ["localhost", "etopade.firebaseapp.com", "etopade.web.app"]
   },

@@ -2,17 +2,17 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { isChurchAdmin, roleLabels } from '../auth'
 import { Field } from '../Field'
 import { createStaff, listStaff, type DirectoryMember } from '../churchApi'
-import { signInWithGoogle } from '../firebaseApp'
+import { AppLink } from '../AppLink'
 import { useStaffSession } from '../useStaffSession'
 import { validateStaffInvite, type StaffInvite } from '../staff'
 
-const emptyInvite = (): StaffInvite => ({ name: '', email: '', role: 'pastor' })
+const emptyInvite = (): StaffInvite => ({ name: '', email: '', role: 'pastor', password: '' })
 
 export function AdminPage() {
   const { ready, account } = useStaffSession()
   const [staff, setStaff] = useState<DirectoryMember[]>([])
   const [invite, setInvite] = useState<StaffInvite>(emptyInvite)
-  const [errors, setErrors] = useState<Partial<Record<'name' | 'email' | 'form', string>>>({})
+  const [errors, setErrors] = useState<Partial<Record<'name' | 'email' | 'password' | 'form', string>>>({})
   const [notice, setNotice] = useState('')
 
   useEffect(() => {
@@ -28,10 +28,10 @@ export function AdminPage() {
       <section className="card login-card">
         <p className="eyebrow-small">Administrator only</p>
         <h1>Church admin</h1>
-        <p className="auth-copy">A church administrator signs in with the church Gmail, then adds pastors and secretaries.</p>
-        <button type="button" className="primary-button" onClick={() => void signInWithGoogle()}>
-          Continue with Google
-        </button>
+        <p className="auth-copy">Sign in as a church administrator or the super admin, then add the people who manage the church.</p>
+        <AppLink className="primary-button" to="/login">
+          Log in
+        </AppLink>
       </section>
     )
   }
@@ -41,10 +41,10 @@ export function AdminPage() {
     const nextErrors = validateStaffInvite(invite)
     setErrors(nextErrors)
     setNotice('')
-    if (nextErrors.name || nextErrors.email || nextErrors.role) return
+    if (nextErrors.name || nextErrors.email || nextErrors.role || nextErrors.password) return
     const saved = await createStaff(invite)
     if ('error' in saved) {
-      setErrors({ email: saved.error === 'exists' ? 'That Gmail is already on the church directory.' : 'Check the name and Gmail.' })
+      setErrors({ email: saved.error === 'exists' ? 'That email is already on the church directory.' : 'Check the name, email, and password.' })
       return
     }
     setInvite(emptyInvite())
@@ -57,7 +57,11 @@ export function AdminPage() {
       <header className="page-heading">
         <p className="eyebrow">{roleLabels[account.role]}</p>
         <h1>Church directory</h1>
-        <p className="auth-copy">Add a pastor or a secretary by the Gmail they will use. A pastor then sees only their own appointments.</p>
+        <p className="auth-copy">
+          {account.role === 'super_admin'
+            ? 'Add a pastor, a secretary, or a church administrator. They sign in with the email and password you set here.'
+            : 'Add a pastor or a secretary. They sign in with the email and password you set here.'}
+        </p>
       </header>
       <section className="content-grid">
         <form className="card stack-form login-card" onSubmit={(event) => void submit(event)} noValidate>
@@ -67,13 +71,17 @@ export function AdminPage() {
           <Field id="staff-name" label="Full name" error={errors.name}>
             <input value={invite.name} onChange={(event) => setInvite({ ...invite, name: event.target.value })} />
           </Field>
-          <Field id="staff-email" label="Gmail address" error={errors.email}>
+          <Field id="staff-email" label="Email address" error={errors.email}>
             <input type="email" value={invite.email} onChange={(event) => setInvite({ ...invite, email: event.target.value })} />
+          </Field>
+          <Field id="staff-password" label="Password" error={errors.password}>
+            <input type="password" value={invite.password} onChange={(event) => setInvite({ ...invite, password: event.target.value })} />
           </Field>
           <Field id="staff-role" label="Role">
             <select value={invite.role} onChange={(event) => setInvite({ ...invite, role: event.target.value as StaffInvite['role'] })}>
               <option value="pastor">Pastor</option>
               <option value="secretary">Secretary</option>
+              {account.role === 'super_admin' ? <option value="church_admin">Church admin</option> : null}
             </select>
           </Field>
           <button type="submit" className="primary-button">

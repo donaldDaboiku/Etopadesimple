@@ -61,4 +61,13 @@ await createIfMissing(org.collection('members').doc('ruth.owusu@grace.example'),
   status: 'invited',
 })
 
+await createIfMissing(org.collection('members').doc('superadmin@etopade.local'), {
+  email: 'superadmin@etopade.local',
+  name: 'Super admin',
+  role: 'super_admin',
+  pastorId: null,
+  uid: null,
+  status: 'invited',
+})
+
 console.log('Seeded Grace Fellowship in the Firebase emulator.')

@@ -3,7 +3,7 @@ import { isChurchAdmin, pastorDashboard, reportView } from '../auth'
 import { defaultSchedule, monthKey, shiftMonth, slotsOn, weekdayOf, WEEKDAY_LABELS, type WeekSchedule } from '../availability'
 import { decideRemote, listBookings, listSchedules, saveSchedule } from '../churchApi'
 import { describeBooking, type BookingRecord } from '../bookings'
-import { signInWithGoogle } from '../firebaseApp'
+import { AppLink } from '../AppLink'
 import { AdminPage } from './AdminPage'
 import { ReportsPage } from './ReportsPage'
 import { MonthCalendar } from '../MonthCalendar'
@@ -51,10 +51,10 @@ export function DashboardPage() {
       <section className="card login-card">
         <p className="eyebrow-small">Staff only</p>
         <h1>Dashboard</h1>
-        <p className="auth-copy">Sign in with Google. Your dashboard shows the work for your role.</p>
-        <button type="button" className="primary-button" onClick={() => void signInWithGoogle()}>
-          Continue with Google
-        </button>
+        <p className="auth-copy">Sign in to open the work for your role.</p>
+        <AppLink className="primary-button" to="/login">
+          Log in
+        </AppLink>
       </section>
     )
   }

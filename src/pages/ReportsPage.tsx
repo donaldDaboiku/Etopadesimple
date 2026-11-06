@@ -3,7 +3,7 @@ import { reportView, roleLabels } from '../auth'
 import { bookingsVisibleTo, countBookings, describeBooking, type BookingRecord } from '../bookings'
 import { listAudits, listBookings, listPastors, type AuditItem } from '../churchApi'
 import { auditText, pastorTallies, statusCounts } from '../reports'
-import { signInWithGoogle } from '../firebaseApp'
+import { AppLink } from '../AppLink'
 import { NoticeList } from '../NoticeList'
 import { useStaffSession } from '../useStaffSession'
 
@@ -34,10 +34,10 @@ export function ReportsPage() {
       <section className="card login-card">
         <p className="eyebrow-small">Staff only</p>
         <h1>Reports</h1>
-        <p className="auth-copy">Reports are for a pastor, a secretary, or a church administrator. Sign in with Google to open them.</p>
-        <button type="button" className="primary-button" onClick={() => void signInWithGoogle()}>
-          Continue with Google
-        </button>
+        <p className="auth-copy">Reports are for a pastor, a secretary, or a church administrator.</p>
+        <AppLink className="primary-button" to="/login">
+          Log in
+        </AppLink>
       </section>
     )
   }

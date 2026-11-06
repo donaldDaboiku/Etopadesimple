@@ -26,7 +26,7 @@ await ensureUser('ama.mensah@grace.example')
 
 const admin = await asUser('ruth.owusu@grace.example')
 if (admin.role !== 'church_admin') throw new Error('Ruth is not the administrator')
-const added = await createStaff({ name: 'Grace Mensah', email: 'grace.mensah@grace.example', role: 'pastor' })
+const added = await createStaff({ name: 'Grace Mensah', email: 'grace.mensah@grace.example', role: 'pastor', password: 'etopade-demo' })
 if ('error' in added) throw new Error(`Could not add pastor: ${added.error}`)
 await signOut(auth)
 

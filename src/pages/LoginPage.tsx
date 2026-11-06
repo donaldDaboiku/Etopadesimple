@@ -1,11 +1,14 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { isStaffRole } from '../auth'
-import { signInWithGoogle } from '../firebaseApp'
+import { signInWithPassword } from '../firebaseApp'
+import { SUPER_ADMIN } from '../superAdmin'
 import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
 
 export function LoginPage() {
   const { ready, account } = useStaffSession()
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -14,12 +17,13 @@ export function LoginPage() {
     else navigate('/')
   }, [ready, account])
 
-  async function signIn() {
+  async function signIn(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
     setError('')
     try {
-      await signInWithGoogle()
+      await signInWithPassword(email, password)
     } catch {
-      setError('Google sign-in did not finish. Try again.')
+      setError('That email or password is not recognised.')
     }
   }
 
@@ -28,19 +32,34 @@ export function LoginPage() {
       <p className="eyebrow-small">Staff access</p>
       <h1>Log in</h1>
       <p className="auth-copy">
-        Sign in with Google. Your dashboard opens the work for your role: a pastor’s own appointments, the church list for a secretary, or the directory for an administrator.
+        Sign in with the email and password stored for your role. A super admin can add the church administrator from the dashboard.
       </p>
       {error ? (
         <p className="auth-message error" role="alert">
           {error}
         </p>
       ) : null}
-      <button type="button" className="primary-button" onClick={() => void signIn()} disabled={!ready}>
-        Continue with Google
-      </button>
+      <form className="stack-form" onSubmit={(event) => void signIn(event)}>
+        <label>
+          Email
+          <input type="email" autoComplete="username" value={email} onChange={(event) => setEmail(event.target.value)} required />
+        </label>
+        <label>
+          Password
+          <input
+            type="password"
+            autoComplete="current-password"
+            value={password}
+            onChange={(event) => setPassword(event.target.value)}
+            required
+          />
+        </label>
+        <button type="submit" className="primary-button" disabled={!ready}>
+          Log in
+        </button>
+      </form>
       <p className="auth-copy demo-note">
-        Local Firebase asks which Google account to use. Administrator: ruth.owusu@grace.example. Pastor: james.adebayo@grace.example.
-        Secretary: ama.mensah@grace.example.
+        Super admin: {SUPER_ADMIN.email} / {SUPER_ADMIN.password}
       </p>
     </section>
   )

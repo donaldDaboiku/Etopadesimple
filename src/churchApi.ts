@@ -16,7 +16,8 @@ import {
 import type { StaffAccount, StaffRole } from './auth.ts'
 import { isStaffRole } from './auth.ts'
 import { BRANCH_ID, buildBooking, holdDocumentId, ORGANISATION_ID, type BookingRecord } from './bookings.ts'
-import { auth, db } from './firebaseApp.ts'
+import { auth, createPasswordAccount, db } from './firebaseApp.ts'
+import { SUPER_ADMIN, isSuperAdminEmail } from './superAdmin.ts'
 import { noticeDocumentId, type NoticeKind, type NoticeScope } from './notices.ts'
 import { auditDocumentId, type AuditAction } from './reports.ts'
 import { staffEmailKey, validateStaffInvite, type StaffInvite } from './staff.ts'
@@ -325,7 +326,23 @@ export async function loadAccount(user: User): Promise<StaffAccount | null> {
   if (!email) return null
   const memberRef = doc(db, 'organisations', CHURCH_ID, 'members', email)
   const snap = await getDoc(memberRef)
-  if (!snap.exists()) return null
+  if (!snap.exists()) {
+    if (!isSuperAdminEmail(email)) return null
+    try {
+      await setDoc(memberRef, {
+        email,
+        name: SUPER_ADMIN.name,
+        role: 'super_admin',
+        pastorId: null,
+        uid: user.uid,
+        status: 'active',
+      })
+    } catch {
+      const again = await getDoc(memberRef)
+      if (!again.exists() || again.data().uid !== user.uid) return null
+    }
+    return { email, name: SUPER_ADMIN.name, role: 'super_admin', pastorId: null }
+  }
   const data = snap.data()
   if (!isStaffRole(data.role)) return null
   if (data.uid == null) {
@@ -333,7 +350,7 @@ export async function loadAccount(user: User): Promise<StaffAccount | null> {
       await updateDoc(memberRef, { uid: user.uid, status: 'active' })
     } catch {
       const again = await getDoc(memberRef)
-      if (!again.exists() || again.data().uid !== user.uid) throw new Error('This Gmail could not be linked.')
+      if (!again.exists() || again.data().uid !== user.uid) throw new Error('This email could not be linked.')
     }
   }
   return {
@@ -366,11 +383,17 @@ export async function listStaff(): Promise<DirectoryMember[]> {
 
 export async function createStaff(invite: StaffInvite) {
   const errors = validateStaffInvite(invite)
-  if (errors.name || errors.email || errors.role) return { error: 'invalid' as const }
+  if (errors.name || errors.email || errors.role || errors.password) return { error: 'invalid' as const }
   const email = staffEmailKey(invite.email)
   const memberRef = doc(db, 'organisations', CHURCH_ID, 'members', email)
   const existing = await getDoc(memberRef)
   if (existing.exists()) return { error: 'exists' as const }
+  try {
+    await createPasswordAccount(email, invite.password)
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+    if (code !== 'auth/email-already-in-use') return { error: 'invalid' as const }
+  }
   const pastorId = invite.role === 'pastor' ? crypto.randomUUID() : null
   if (pastorId) {
     await setDoc(doc(db, 'organisations', CHURCH_ID, 'pastors', pastorId), {
