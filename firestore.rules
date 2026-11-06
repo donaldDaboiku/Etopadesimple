@@ -1,0 +1,403 @@
+rules_version = '2';
+
+// ===============================================================
+// Assumed Data Model
+// ===============================================================
+//
+// organisations/grace
+//   name: string
+//
+// organisations/grace/pastors/{pastorId}
+//   name: string (2-120)
+//   active: bool
+//   Public read is required by the booking form.
+//
+// organisations/grace/slotHolds/{pastorId_date_slot}
+//   pastorId, date (YYYY-MM-DD), slot (HH:MM), status, bookingId
+//   Public read is required so taken times show without visitor details.
+//
+// organisations/grace/bookings/{bookingId}
+//   pastorId, appointmentTypeId, visitorName, visitorEmail, visitorPhone,
+//   contactMethod, meetingMode, date, slot, scheduledFor, status, notes,
+//   bookingReference, createdAt, holdId
+//
+// organisations/grace/members/{lowercaseEmail}
+//   email, name, role, pastorId, uid, status
+//
+// organisations/grace/availability/{pastorId}
+//   weekdays: list of 0-6 (Sunday-Saturday), slots: catalog times, blockedDates
+//   Public read is required so the booking calendar can hide closed days.
+//
+// organisations/grace/notices/{bookingId_scope_kind}
+//   scope pastor|office, pastorId, bookingId, kind, visitorName, date, slot, createdAt
+//   A pastor reads only notices for their pastorId. Office reads scope office.
+//   Visitor email is not stored here.
+//
+// organisations/grace/noticeReads/{email__noticeId}
+//   email, noticeId. The signed-in person creates only their own dismissals.
+//
+// organisations/grace/audits/{bookingId_action}
+//   bookingId, pastorId, action requested|confirmed|declined, actor, visitorName,
+//   bookingReference, createdAt. Visitor email is not stored.
+//   A pastor reads rows for their pastorId. Office reads every row.
+//
+// ===============================================================
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function isAuthenticated() {
+      return request.auth != null && request.auth.token.email is string;
+    }
+
+    function emailId() {
+      return request.auth.token.email.lower();
+    }
+
+    function memberPath() {
+      return /databases/$(database)/documents/organisations/grace/members/$(emailId());
+    }
+
+    function memberData() {
+      return get(memberPath()).data;
+    }
+
+    function isStaff() {
+      return isAuthenticated()
+        && exists(memberPath())
+        && memberData().status == 'active'
+        && memberData().email == emailId();
+    }
+
+    function isAdmin() {
+      return isStaff() && memberData().role in ['church_admin', 'super_admin'];
+    }
+
+    function isOffice() {
+      return isStaff() && memberData().role in ['church_admin', 'super_admin', 'secretary'];
+    }
+
+    function isPastorAccount() {
+      return isStaff() && memberData().role in ['pastor', 'assistant_pastor'];
+    }
+
+    function hasOnlyAllowedFields(fields) {
+      return request.resource.data.keys().hasOnly(fields);
+    }
+
+    function areImmutableFieldsUnchanged(fields) {
+      return !request.resource.data.diff(resource.data).affectedKeys().hasAny(fields);
+    }
+
+    function isValidEmail(email) {
+      return email is string && email.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') && email.size() <= 254;
+    }
+
+    function validName(value) {
+      return value is string && value.size() >= 2 && value.size() <= 120;
+    }
+
+    function pastorPath(pastorId) {
+      return /databases/$(database)/documents/organisations/grace/pastors/$(pastorId);
+    }
+
+    function holdPath(holdId) {
+      return /databases/$(database)/documents/organisations/grace/slotHolds/$(holdId);
+    }
+
+    function bookingPath(bookingId) {
+      return /databases/$(database)/documents/organisations/grace/bookings/$(bookingId);
+    }
+
+    function noticePath(noticeId) {
+      return /databases/$(database)/documents/organisations/grace/notices/$(noticeId);
+    }
+
+    function isValidAudit(data) {
+      return data.keys().hasOnly(['bookingId', 'pastorId', 'action', 'actor', 'visitorName', 'bookingReference', 'createdAt'])
+        && data.bookingId is string
+        && data.bookingId.size() >= 8
+        && data.pastorId is string
+        && data.action in ['requested', 'confirmed', 'declined']
+        && data.actor is string
+        && data.actor.size() >= 2
+        && data.actor.size() <= 254
+        && validName(data.visitorName)
+        && data.bookingReference is string
+        && data.bookingReference.matches('^[A-F0-9]{12}$')
+        && data.createdAt == request.time;
+    }
+
+    function canReadNotice(data) {
+      return (isOffice() && data.scope == 'office')
+        || (isPastorAccount() && data.pastorId == memberData().pastorId);
+    }
+
+    function isValidNotice(data) {
+      return data.keys().hasOnly(['scope', 'pastorId', 'bookingId', 'kind', 'visitorName', 'date', 'slot', 'createdAt'])
+        && data.scope in ['pastor', 'office']
+        && data.kind in ['requested', 'confirmed', 'declined']
+        && data.bookingId is string
+        && data.bookingId.size() >= 8
+        && validName(data.visitorName)
+        && data.date is string
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.slot in ['09:00', '09:30', '10:15', '11:00', '13:30', '15:00', '15:45']
+        && data.createdAt == request.time
+        && (
+          (data.scope == 'pastor' && data.pastorId is string)
+          || (data.scope == 'office' && data.pastorId == null)
+        );
+    }
+
+    function availabilityPath(pastorId) {
+      return /databases/$(database)/documents/organisations/grace/availability/$(pastorId);
+    }
+
+    function weekdayIndex(date) {
+      let parts = date.split('-');
+      return timestamp.date(int(parts[0]), int(parts[1]), int(parts[2])).dayOfWeek() - 1;
+    }
+
+    function slotFitsSchedule(data) {
+      return !exists(availabilityPath(data.pastorId))
+        || (
+          data.slot in get(availabilityPath(data.pastorId)).data.slots
+          && !(data.date in get(availabilityPath(data.pastorId)).data.blockedDates)
+          && get(availabilityPath(data.pastorId)).data.weekdays.hasAny([weekdayIndex(data.date)])
+        );
+    }
+
+    function isValidSchedule(data) {
+      return data.keys().hasOnly(['weekdays', 'slots', 'blockedDates'])
+        && data.weekdays is list
+        && data.weekdays.size() > 0
+        && data.weekdays.size() <= 7
+        && data.weekdays.hasOnly([0, 1, 2, 3, 4, 5, 6])
+        && data.slots is list
+        && data.slots.size() > 0
+        && data.slots.size() <= 7
+        && data.slots.hasOnly(['09:00', '09:30', '10:15', '11:00', '13:30', '15:00', '15:45'])
+        && data.blockedDates is list
+        && data.blockedDates.size() <= 90
+        && (
+          data.blockedDates.size() == 0
+          || data.blockedDates.join(',').matches('^\\d{4}-\\d{2}-\\d{2}(,\\d{4}-\\d{2}-\\d{2})*$')
+        );
+    }
+
+    function isValidPastor(data) {
+      return hasOnlyAllowedFields(['name', 'active'])
+        && validName(data.name)
+        && data.active is bool;
+    }
+
+    function isValidHold(data) {
+      return data.keys().hasOnly(['pastorId', 'date', 'slot', 'status', 'bookingId'])
+        && data.pastorId is string
+        && data.date is string
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.slot in ['09:00', '09:30', '10:15', '11:00', '13:30', '15:00', '15:45']
+        && data.status in ['pending', 'confirmed']
+        && data.bookingId is string
+        && data.bookingId.size() >= 8
+        && exists(pastorPath(data.pastorId))
+        && get(pastorPath(data.pastorId)).data.active == true;
+    }
+
+    function isValidBooking(data) {
+      return data.keys().hasOnly([
+        'pastorId', 'appointmentTypeId', 'visitorName', 'visitorEmail', 'visitorPhone',
+        'contactMethod', 'meetingMode', 'date', 'slot', 'scheduledFor', 'status', 'notes',
+        'bookingReference', 'createdAt', 'holdId'
+      ])
+        && data.pastorId is string
+        && data.appointmentTypeId is string
+        && data.appointmentTypeId.size() == 36
+        && validName(data.visitorName)
+        && isValidEmail(data.visitorEmail)
+        && data.contactMethod in ['email', 'whatsapp', 'sms']
+        && data.meetingMode in ['physical', 'virtual']
+        && data.date is string
+        && data.date.matches('^\\d{4}-\\d{2}-\\d{2}$')
+        && data.slot in ['09:00', '09:30', '10:15', '11:00', '13:30', '15:00', '15:45']
+        && data.scheduledFor is timestamp
+        && data.status in ['pending', 'confirmed', 'declined']
+        && (data.notes == null || (data.notes is string && data.notes.size() <= 1000))
+        && (
+          (data.contactMethod == 'email' && (data.visitorPhone == null || (data.visitorPhone is string && data.visitorPhone.size() <= 40)))
+          || (data.contactMethod in ['whatsapp', 'sms'] && data.visitorPhone is string && data.visitorPhone.size() >= 7 && data.visitorPhone.size() <= 40)
+        )
+        && data.bookingReference is string
+        && data.bookingReference.matches('^[A-F0-9]{12}$')
+        && data.createdAt is timestamp
+        && data.holdId == data.pastorId + '_' + data.date + '_' + data.slot.replace(':', '-');
+    }
+
+    function isValidMember(data, emailKey) {
+      return data.keys().hasOnly(['email', 'name', 'role', 'pastorId', 'uid', 'status'])
+        && data.email == emailKey
+        && isValidEmail(data.email)
+        && validName(data.name)
+        && data.role in ['super_admin', 'church_admin', 'pastor', 'assistant_pastor', 'secretary', 'read_only_staff']
+        && (
+          (data.role in ['pastor', 'assistant_pastor'] && data.pastorId is string && exists(pastorPath(data.pastorId)))
+          || (!(data.role in ['pastor', 'assistant_pastor']) && data.pastorId == null)
+        )
+        && (
+          (data.status == 'invited' && data.uid == null)
+          || (data.status == 'active' && data.uid is string && data.uid.size() > 0)
+        );
+    }
+
+    match /organisations/grace {
+      allow read: if isStaff();
+      allow write: if false;
+
+      match /availability/{pastorId} {
+        allow read: if true;
+        allow create, update: if isValidSchedule(request.resource.data)
+          && exists(pastorPath(pastorId))
+          && (
+            isAdmin()
+            || (isPastorAccount() && memberData().pastorId == pastorId)
+          );
+        allow delete: if false;
+      }
+
+      match /pastors/{pastorId} {
+        allow read: if true;
+        allow create: if isAdmin() && isValidPastor(request.resource.data) && request.resource.data.active == true;
+        allow update, delete: if false;
+      }
+
+      match /slotHolds/{holdId} {
+        allow read: if true;
+        allow create: if isValidHold(request.resource.data)
+          && request.resource.data.status == 'pending'
+          && holdId == request.resource.data.pastorId + '_' + request.resource.data.date + '_' + request.resource.data.slot.replace(':', '-');
+        allow update: if isPastorAccount()
+          && resource.data.pastorId == memberData().pastorId
+          && resource.data.status == 'pending'
+          && request.resource.data.status == 'confirmed'
+          && isValidHold(request.resource.data)
+          && areImmutableFieldsUnchanged(['pastorId', 'date', 'slot', 'bookingId']);
+        allow delete: if isAdmin()
+          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+      }
+
+      match /bookings/{bookingId} {
+        allow read: if isOffice()
+          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+        allow create: if isValidBooking(request.resource.data)
+          && request.resource.data.status == 'pending'
+          && request.resource.data.createdAt == request.time
+          && request.resource.data.scheduledFor > request.time + duration.value(30, 'm')
+          && request.resource.data.scheduledFor < request.time + duration.value(90, 'd')
+          && exists(pastorPath(request.resource.data.pastorId))
+          && get(pastorPath(request.resource.data.pastorId)).data.active == true
+          && exists(holdPath(request.resource.data.holdId))
+          && get(holdPath(request.resource.data.holdId)).data.bookingId == bookingId
+          && get(holdPath(request.resource.data.holdId)).data.pastorId == request.resource.data.pastorId
+          && slotFitsSchedule(request.resource.data);
+        allow update: if isPastorAccount()
+          && resource.data.pastorId == memberData().pastorId
+          && resource.data.status == 'pending'
+          && request.resource.data.status in ['confirmed', 'declined']
+          && isValidBooking(request.resource.data)
+          && areImmutableFieldsUnchanged([
+            'pastorId', 'appointmentTypeId', 'visitorName', 'visitorEmail', 'visitorPhone',
+            'contactMethod', 'meetingMode', 'date', 'slot', 'scheduledFor', 'notes',
+            'bookingReference', 'createdAt', 'holdId'
+          ]);
+        allow delete: if false;
+      }
+
+      match /notices/{noticeId} {
+        allow read: if canReadNotice(resource.data);
+        allow create: if isValidNotice(request.resource.data)
+          && noticeId == request.resource.data.bookingId + '_' + request.resource.data.scope + '_' + request.resource.data.kind
+          && exists(bookingPath(request.resource.data.bookingId))
+          && get(bookingPath(request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
+          && get(bookingPath(request.resource.data.bookingId)).data.date == request.resource.data.date
+          && get(bookingPath(request.resource.data.bookingId)).data.slot == request.resource.data.slot
+          && (
+            request.resource.data.scope == 'office'
+            || get(bookingPath(request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
+          )
+          && (
+            (
+              request.resource.data.kind == 'requested'
+              && get(bookingPath(request.resource.data.bookingId)).data.status == 'pending'
+            )
+            || (
+              request.resource.data.kind in ['confirmed', 'declined']
+              && get(bookingPath(request.resource.data.bookingId)).data.status == request.resource.data.kind
+              && isPastorAccount()
+              && memberData().pastorId == get(bookingPath(request.resource.data.bookingId)).data.pastorId
+            )
+          );
+        allow update, delete: if false;
+      }
+
+      match /noticeReads/{readId} {
+        allow read: if isStaff() && resource.data.email == emailId();
+        allow create: if isStaff()
+          && request.resource.data.keys().hasOnly(['email', 'noticeId'])
+          && request.resource.data.email == emailId()
+          && request.resource.data.noticeId is string
+          && readId == emailId() + '__' + request.resource.data.noticeId
+          && exists(noticePath(request.resource.data.noticeId))
+          && canReadNotice(get(noticePath(request.resource.data.noticeId)).data);
+        allow update, delete: if false;
+      }
+
+      match /audits/{auditId} {
+        allow read: if isOffice()
+          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+        allow create: if isValidAudit(request.resource.data)
+          && auditId == request.resource.data.bookingId + '_' + request.resource.data.action
+          && exists(bookingPath(request.resource.data.bookingId))
+          && get(bookingPath(request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
+          && get(bookingPath(request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
+          && get(bookingPath(request.resource.data.bookingId)).data.bookingReference == request.resource.data.bookingReference
+          && (
+            (
+              request.resource.data.action == 'requested'
+              && request.resource.data.actor == 'visitor'
+              && get(bookingPath(request.resource.data.bookingId)).data.status == 'pending'
+            )
+            || (
+              request.resource.data.action in ['confirmed', 'declined']
+              && get(bookingPath(request.resource.data.bookingId)).data.status == request.resource.data.action
+              && isPastorAccount()
+              && memberData().pastorId == get(bookingPath(request.resource.data.bookingId)).data.pastorId
+              && request.resource.data.actor == emailId()
+            )
+          );
+        allow update, delete: if false;
+      }
+
+      match /members/{emailKey} {
+        allow read: if isAdmin() || (isAuthenticated() && emailKey == emailId());
+        allow create: if isAdmin()
+          && isValidMember(request.resource.data, emailKey)
+          && request.resource.data.status == 'invited'
+          && request.resource.data.uid == null
+          && request.resource.data.role in ['pastor', 'assistant_pastor', 'secretary'];
+        allow update: if isAuthenticated()
+          && emailKey == emailId()
+          && resource.data.uid == null
+          && resource.data.email == emailId()
+          && request.resource.data.uid == request.auth.uid
+          && request.resource.data.status == 'active'
+          && isValidMember(request.resource.data, emailKey)
+          && areImmutableFieldsUnchanged(['email', 'name', 'role', 'pastorId']);
+        allow delete: if false;
+      }
+    }
+
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

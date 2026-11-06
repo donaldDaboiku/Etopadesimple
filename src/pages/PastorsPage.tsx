@@ -1,7 +1,18 @@
+import { useEffect, useState } from 'react'
 import { AppLink } from '../AppLink'
-import { pastors } from '../validation'
+import { listPastors } from '../churchApi'
+import { pastors as fallbackPastors } from '../validation'
 
 export function PastorsPage() {
+  const [pastors, setPastors] = useState(fallbackPastors)
+  useEffect(() => {
+    listPastors()
+      .then((rows) => {
+        if (rows.length > 0) setPastors(rows)
+      })
+      .catch(() => undefined)
+  }, [])
+
   return (
     <>
       <header className="page-heading">

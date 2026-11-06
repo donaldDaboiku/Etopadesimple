@@ -1,8 +1,10 @@
-import { useState, type FormEvent } from 'react'
-import { activeSlotKeys, commitBooking, describeBooking, readBookings } from '../bookings'
+import { useEffect, useState, type FormEvent } from 'react'
+import { defaultSchedule, monthKey, shiftMonth, slotsOn, type WeekSchedule } from '../availability'
+import { createBooking, listOpenSlotKeys, listPastors, listSchedules } from '../churchApi'
+import { describeBooking } from '../bookings'
 import { Field } from '../Field'
+import { MonthCalendar } from '../MonthCalendar'
 import {
-  SLOT_TIMES,
   appointmentTypes,
   emptyBooking,
   formatIsoDate,
@@ -31,8 +33,9 @@ const fieldOrder: (keyof BookingDraft)[] = [
 
 const findings = [
   'Name, email, phone, notice period, and the 90-day window are checked before submit.',
-  'A pending booking already stored for that pastor and time is rejected.',
-  'Each accepted request is stored as a pending booking for Grace Fellowship.',
+  'A pending or confirmed booking already stored for that pastor and time is rejected.',
+  'Times follow that pastor’s weekly hours. A blocked day cannot be requested.',
+  'Each accepted request is stored as a pending booking in Firebase.',
   'Visitors can request a booking without reading private appointment records.',
 ]
 
@@ -102,14 +105,36 @@ function storeSession(value: SessionForm) {
 export function BookingPage() {
   const [session, setSession] = useState<SessionForm>(readSession)
   const [errors, setErrors] = useState<BookingErrors>({})
-  const [taken, setTaken] = useState<string[]>(() => activeSlotKeys(readBookings()))
-  const [{ today, maxDate }] = useState(() => {
+  const [pastorOptions, setPastorOptions] = useState(pastors)
+  const [taken, setTaken] = useState<string[]>([])
+  const [schedules, setSchedules] = useState<Record<string, WeekSchedule>>({})
+  const [serviceError, setServiceError] = useState('')
+  const [{ today, maxDate, cursor }] = useState(() => {
     const now = new Date()
     const latest = new Date(now)
     latest.setDate(latest.getDate() + 90)
-    return { today: formatIsoDate(now), maxDate: formatIsoDate(latest) }
+    return {
+      today: formatIsoDate(now),
+      maxDate: formatIsoDate(latest),
+      cursor: { year: now.getFullYear(), month: now.getMonth() },
+    }
   })
+  const [monthCursor, setMonthCursor] = useState(cursor)
   const { draft, confirmation, notice } = session
+
+  useEffect(() => {
+    listPastors()
+      .then((rows) => {
+        if (rows.length > 0) setPastorOptions(rows)
+      })
+      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+    listOpenSlotKeys()
+      .then(setTaken)
+      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+    listSchedules()
+      .then(setSchedules)
+      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+  }, [])
 
   function saveSession(next: SessionForm) {
     storeSession(next)
@@ -121,14 +146,44 @@ export function BookingPage() {
     setErrors((current) => ({ ...current, [key]: undefined }))
   }
 
+  function scheduleFor(pastorId: string) {
+    return schedules[pastorId] ?? defaultSchedule()
+  }
+
+  function choosePastor(pastorId: string) {
+    const offered = draft.date ? slotsOn(scheduleFor(pastorId), draft.date) : []
+    saveSession({
+      ...session,
+      draft: { ...draft, pastorId, slot: offered.includes(draft.slot) ? draft.slot : '' },
+      notice: '',
+    })
+    setErrors((current) => ({ ...current, pastorId: undefined, slot: undefined, date: undefined }))
+  }
+
+  function chooseDate(date: string) {
+    const offered = slotsOn(scheduleFor(draft.pastorId), date)
+    saveSession({
+      ...session,
+      draft: { ...draft, date, slot: offered.includes(draft.slot) ? draft.slot : '' },
+      notice: '',
+    })
+    setErrors((current) => ({ ...current, date: undefined, slot: undefined }))
+  }
+
   function saveDraft() {
     localStorage.setItem(DRAFT_KEY, JSON.stringify(draft))
     saveSession({ ...session, notice: 'Draft saved on this device.' })
   }
 
-  function submitBooking(event: FormEvent<HTMLFormElement>) {
+  async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    const nextErrors = validateBooking(draft, new Date(), taken)
+    const nextErrors = validateBooking(
+      draft,
+      new Date(),
+      taken,
+      pastorOptions.map((pastor) => pastor.id),
+      scheduleFor(draft.pastorId),
+    )
     setErrors(nextErrors)
     const firstInvalid = fieldOrder.find((key) => nextErrors[key])
     if (firstInvalid) {
@@ -137,31 +192,40 @@ export function BookingPage() {
       return
     }
 
-    const saved = commitBooking(draft)
-    setTaken(activeSlotKeys(readBookings()))
-    if ('error' in saved) {
-      setErrors({ slot: 'That time is already requested for this pastor.' })
-      document.getElementById('field-slot')?.focus()
-      return
+    try {
+      const saved = await createBooking(draft)
+      setTaken(await listOpenSlotKeys())
+      if ('error' in saved) {
+        if (saved.error === 'closed') {
+          setErrors({ date: 'That pastor is not available on this day.' })
+          document.getElementById('field-date')?.focus()
+          return
+        }
+        setErrors({ slot: 'That time is already requested for this pastor.' })
+        document.getElementById('field-slot')?.focus()
+        return
+      }
+      const pastor = pastorOptions.find((item) => item.id === draft.pastorId)?.name ?? 'Pastor'
+      const category = appointmentTypes.find((item) => item.id === draft.appointmentTypeId)?.name ?? 'Appointment'
+      localStorage.removeItem(DRAFT_KEY)
+      saveSession({
+        draft: { ...draft, slot: '', notes: '' },
+        confirmation: {
+          reference: saved.record.booking_reference,
+          pastor,
+          category,
+          when: describeBooking(saved.record, pastorOptions).when,
+        },
+        notice: '',
+      })
+    } catch {
+      setServiceError('The request could not be saved in Firebase.')
     }
-    const pastor = pastors.find((item) => item.id === draft.pastorId)?.name ?? 'Pastor'
-    const category = appointmentTypes.find((item) => item.id === draft.appointmentTypeId)?.name ?? 'Appointment'
-    localStorage.removeItem(DRAFT_KEY)
-    saveSession({
-      draft: { ...draft, slot: '', notes: '' },
-      confirmation: {
-        reference: saved.record.booking_reference,
-        pastor,
-        category,
-        when: describeBooking(saved.record).when,
-      },
-      notice: '',
-    })
   }
 
   return (
     <section className="content-grid">
-      <form className="booking-form card" aria-label="Public booking form" onSubmit={submitBooking} noValidate>
+      <form className="booking-form card" aria-label="Public booking form" onSubmit={(event) => void submitBooking(event)} noValidate>
         <div className="section-header">
           <div>
             <p className="eyebrow-small">Public booking portal</p>
@@ -175,6 +239,11 @@ export function BookingPage() {
             Request {confirmation.reference} is pending for {confirmation.pastor}, {confirmation.category}, on {confirmation.when}.
           </p>
         ) : null}
+        {serviceError ? (
+          <p className="form-banner error" role="alert">
+            {serviceError}
+          </p>
+        ) : null}
         {notice ? (
           <p className="form-banner success" role="status">
             {notice}
@@ -183,8 +252,8 @@ export function BookingPage() {
 
         <div className="field-grid">
           <Field id="field-pastorId" label="Select pastor" error={errors.pastorId}>
-            <select value={draft.pastorId} onChange={(event) => update('pastorId', event.target.value)}>
-              {pastors.map((pastor) => (
+            <select value={draft.pastorId} onChange={(event) => choosePastor(event.target.value)}>
+              {pastorOptions.map((pastor) => (
                 <option key={pastor.id} value={pastor.id}>
                   {pastor.name}
                 </option>
@@ -202,10 +271,6 @@ export function BookingPage() {
             </select>
           </Field>
 
-          <Field id="field-date" label="Preferred date" error={errors.date}>
-            <input type="date" min={today} max={maxDate} value={draft.date} onChange={(event) => update('date', event.target.value)} />
-          </Field>
-
           <Field id="field-contactMethod" label="Contact method" error={errors.contactMethod}>
             <select value={draft.contactMethod} onChange={(event) => update('contactMethod', event.target.value)}>
               <option value="email">Email</option>
@@ -215,25 +280,55 @@ export function BookingPage() {
           </Field>
         </div>
 
+        <div className="slot-group" id="field-date" tabIndex={-1}>
+          <span>Preferred date</span>
+          <MonthCalendar
+            year={monthCursor.year}
+            month={monthCursor.month}
+            onPrev={() => setMonthCursor((current) => shiftMonth(current, -1))}
+            onNext={() => setMonthCursor((current) => shiftMonth(current, 1))}
+            prevDisabled={monthKey(monthCursor) <= today.slice(0, 7)}
+            nextDisabled={monthKey(monthCursor) >= maxDate.slice(0, 7)}
+            dayPressed={(date) => draft.date === date}
+            dayLabel={(date) => date}
+            dayDisabled={(date, inMonth) => !inMonth || date < today || date > maxDate || slotsOn(scheduleFor(draft.pastorId), date).length === 0}
+            dayClass={(date, inMonth) => {
+              if (!inMonth || date < today || date > maxDate) return 'outside'
+              const offered = slotsOn(scheduleFor(draft.pastorId), date)
+              if (offered.length === 0) return 'closed'
+              if (offered.every((slot) => taken.includes(slotKey(draft.pastorId, date, slot)))) return 'taken'
+              return 'open'
+            }}
+            onPick={chooseDate}
+          />
+          {errors.date ? <small className="field-error">{errors.date}</small> : null}
+        </div>
+
         <div className="slot-group" id="field-slot" tabIndex={-1}>
           <span>Available time slots</span>
-          <div className="slot-list" role="group" aria-describedby={errors.slot ? 'field-slot-error' : undefined}>
-            {SLOT_TIMES.map((slot) => {
-              const unavailable = draft.date !== '' && taken.includes(slotKey(draft.pastorId, draft.date, slot))
-              return (
-                <button
-                  type="button"
-                  key={slot}
-                  className="slot-button"
-                  aria-pressed={draft.slot === slot}
-                  disabled={unavailable}
-                  onClick={() => update('slot', slot)}
-                >
-                  {unavailable ? `${slot} taken` : slot}
-                </button>
-              )
-            })}
-          </div>
+          {!draft.date ? (
+            <p className="auth-copy">Choose an open day to see this pastor’s times.</p>
+          ) : slotsOn(scheduleFor(draft.pastorId), draft.date).length === 0 ? (
+            <p className="auth-copy">That pastor does not take appointments on this day.</p>
+          ) : (
+            <div className="slot-list" role="group" aria-describedby={errors.slot ? 'field-slot-error' : undefined}>
+              {slotsOn(scheduleFor(draft.pastorId), draft.date).map((slot) => {
+                const unavailable = taken.includes(slotKey(draft.pastorId, draft.date, slot))
+                return (
+                  <button
+                    type="button"
+                    key={slot}
+                    className="slot-button"
+                    aria-pressed={draft.slot === slot}
+                    disabled={unavailable}
+                    onClick={() => update('slot', slot)}
+                  >
+                    {unavailable ? `${slot} taken` : slot}
+                  </button>
+                )
+              })}
+            </div>
+          )}
           {errors.slot ? (
             <small id="field-slot-error" className="field-error">
               {errors.slot}
@@ -327,9 +422,7 @@ export function BookingPage() {
         <div className="next-steps">
           <h3>Next milestones</h3>
           <ul>
-            <li>Pastor and administrator dashboards</li>
-            <li>Notifications</li>
-            <li>Sync these rows to Supabase</li>
+            <li>A dedicated Firebase project</li>
           </ul>
         </div>
       </aside>

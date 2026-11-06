@@ -3,6 +3,8 @@ const titles: Record<string, string> = {
   '/booking': 'Booking',
   '/pastors': 'Pastors',
   '/reports': 'Reports',
+  '/dashboard': 'Dashboard',
+  '/admin': 'Admin',
   '/login': 'Log in',
 }
 

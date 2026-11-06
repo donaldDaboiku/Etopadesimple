@@ -1,9 +1,18 @@
 import { AppLink } from '../AppLink'
 
-const highlights = [
-  'Multi-organisation and branch-ready architecture',
-  'Booking details are checked before a request is accepted',
-  'The same pastor and time cannot be requested twice here',
+const capabilities = [
+  {
+    title: 'Visitors request a time',
+    text: 'A request records the purpose, the day, and whether the meeting is in person or virtual. A time already taken cannot be requested again.',
+  },
+  {
+    title: 'Each role has its own dashboard',
+    text: 'After sign-in, a pastor, an assistant, a secretary, and a church administrator each open the work that belongs to that role.',
+  },
+  {
+    title: 'Hours belong to the pastor',
+    text: 'Open days, appointment times, and closed dates come from that pastor’s own schedule.',
+  },
 ]
 
 export function OverviewPage() {
@@ -13,44 +22,31 @@ export function OverviewPage() {
         <p className="eyebrow">Secure ministry scheduling</p>
         <h1>Pastoral care made simple, structured, and secure.</h1>
         <p className="lede">
-          ETOPADE helps churches and pastors manage appointments, counselling, prayer requests, pastoral visits, and
-          follow-ups with a calm and professional user experience.
+          ETOPADE helps a church receive appointment requests, keep each pastor’s schedule, and give every staff member a
+          dashboard for their own work.
         </p>
 
         <div className="cta-row">
           <AppLink className="primary-button" to="/booking">
             Book a session
           </AppLink>
-          <AppLink className="secondary-button" to="/pastors">
-            Meet the pastors
+          <AppLink className="secondary-button" to="/login">
+            Log in
           </AppLink>
         </div>
-
-        <ul className="trust-list">
-          {highlights.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
       </div>
 
       <div className="hero-panel">
         <div className="snapshot-card">
-          <span className="panel-label">Today&apos;s focus</span>
-          <h2>Pastor James Adebayo</h2>
-          <div className="snapshot-grid">
-            <div>
-              <strong>12</strong>
-              <span>Appointments</span>
-            </div>
-            <div>
-              <strong>4</strong>
-              <span>Pending</span>
-            </div>
-            <div>
-              <strong>2</strong>
-              <span>Follow-ups</span>
-            </div>
-          </div>
+          <span className="panel-label">What ETOPADE does</span>
+          <ul className="capability-list">
+            {capabilities.map((item) => (
+              <li key={item.title}>
+                <strong>{item.title}</strong>
+                <span>{item.text}</span>
+              </li>
+            ))}
+          </ul>
         </div>
       </div>
     </section>

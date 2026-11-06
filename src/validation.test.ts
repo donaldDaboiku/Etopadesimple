@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { emptyBooking, slotKey, validateBooking, validateSignIn } from './validation.ts'
+import { emptyBooking, slotKey, validateBooking } from './validation.ts'
 
 const now = new Date(2026, 10, 3, 8, 0, 0)
 
@@ -44,11 +44,4 @@ test('rejects a slot already requested for the same pastor', () => {
   const draft = validDraft()
   const errors = validateBooking(draft, now, [slotKey(draft.pastorId, draft.date, draft.slot)])
   assert.equal(errors.slot, 'That time is already requested for this pastor.')
-})
-
-test('sign-in checks email and password shape', () => {
-  assert.deepEqual(validateSignIn('pastor@grace.example', 'correct-horse'), {})
-  const errors = validateSignIn('pastor', 'short')
-  assert.ok(errors.email)
-  assert.ok(errors.password)
 })

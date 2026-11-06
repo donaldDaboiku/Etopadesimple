@@ -2,14 +2,15 @@ import { useEffect } from 'react'
 import './App.css'
 import { AppLink } from './AppLink'
 import { BookingPage } from './pages/BookingPage'
+import { DashboardPage } from './pages/DashboardPage'
 import { LoginPage } from './pages/LoginPage'
 import { MissingPage } from './pages/MissingPage'
 import { OverviewPage } from './pages/OverviewPage'
 import { PastorsPage } from './pages/PastorsPage'
 import { ReportsPage } from './pages/ReportsPage'
-import { reportView } from './auth'
+import { AdminPage } from './pages/AdminPage'
 import { pageTitle } from './route'
-import { clearStaffSession } from './staffSession'
+import { signOutStaff } from './firebaseApp'
 import { usePath, navigate } from './usePath'
 import { useStaffSession } from './useStaffSession'
 
@@ -18,14 +19,16 @@ const pages = {
   '/booking': BookingPage,
   '/pastors': PastorsPage,
   '/reports': ReportsPage,
+  '/dashboard': DashboardPage,
+  '/admin': AdminPage,
   '/login': LoginPage,
 }
 
 function App() {
   const path = usePath()
-  const session = useStaffSession()
+  const { ready, account } = useStaffSession()
   const Page = pages[path as keyof typeof pages]
-  const showReports = path !== '/login' && reportView(session?.role) !== null
+  const showDashboard = path !== '/login' && Boolean(account)
 
   useEffect(() => {
     const title = pageTitle(path)
@@ -48,18 +51,18 @@ function App() {
           <AppLink to="/">Overview</AppLink>
           <AppLink to="/booking">Booking</AppLink>
           <AppLink to="/pastors">Pastors</AppLink>
-          {showReports ? <AppLink to="/reports">Reports</AppLink> : null}
+          {showDashboard ? <AppLink to="/dashboard">Dashboard</AppLink> : null}
         </nav>
 
-        {session ? (
+        {ready && account ? (
           <div className="session-box">
-            <span>{session.name}</span>
+            <span>{account.name}</span>
             <button
               type="button"
               className="secondary-button"
               onClick={() => {
-                clearStaffSession()
-                if (path === '/reports') navigate('/')
+                void signOutStaff()
+                if (path === '/reports' || path === '/dashboard' || path === '/admin') navigate('/')
               }}
             >
               Log out

@@ -37,6 +37,7 @@ Status: complete
 
 - Staff sign-in checks the church directory instead of letting a visitor choose a role.
 - Pastors see their own report. Secretaries and church administrators see the church-wide report.
+- A pastor cannot open another pastor’s booking rows. The database policy uses the same split.
 - Reports stay hidden on the public pages and on the login page.
 - A secretary and a church administrator were added to the seed data.
 
@@ -50,9 +51,69 @@ Status: complete
 - The same pastor and time cannot be stored twice.
 - Pastor and secretary reports read those rows instead of sample figures.
 
+## Phase 5 – Pastor dashboard
+
+Status: complete
+
+### Completed
+
+- A pastor signs in to their own dashboard and can confirm or decline a pending request.
+- A confirmed time stays blocked. A declined time can be requested again.
+- Another pastor, a secretary, and a church administrator cannot open that dashboard or decide those requests.
+
+## Phase 6 – Administrator dashboard on Firebase
+
+Status: complete
+
+### Completed
+
+- Replaced the Supabase plan with Firebase Authentication and Cloud Firestore.
+- A church administrator signs in with Google and adds a pastor or secretary by Gmail.
+- That person signs in with the same Gmail and receives only the role that was stored.
+- Public booking requests are written to Firestore. A pastor still confirms or declines only their own requests.
+
+## Phase 7 – Availability and calendar
+
+Status: complete
+
+### Completed
+
+- Each pastor’s working days, times, and blocked dates are stored in Firebase instead of a single hardcoded list.
+- The public booking page shows a month calendar. Closed days and blocked dates cannot be requested, and only that pastor’s hours are offered.
+- A pastor sets those hours on their dashboard. Saving writes the schedule, and Firestore rejects a request outside it.
+
+## Phase 8 – Notifications
+
+Status: complete
+
+### Completed
+
+- A new request writes a notification for that pastor and one for the church office.
+- Confirming or declining writes an office notification.
+- Each person dismisses a notification for themselves. A pastor does not see another pastor’s notices.
+
+## Phase 9 – Reporting and audit logs
+
+Status: complete
+
+### Completed
+
+- Church and pastor reports count pending, confirmed, and declined requests, and still show how many are scheduled today.
+- A secretary or church administrator also sees those counts for each pastor.
+- Each new request, confirmation, and decline is stored as an activity row. A pastor sees only their own rows.
+
+## Phase 10 – Validation and deployment
+
+Status: validation complete, deployment waiting on a project
+
+### Completed
+
+- Tests, lint, and the production build pass.
+- Firebase Hosting is configured to serve the built app and send every address to `index.html`.
+- A cloud deploy needs a dedicated Firebase project. The local id `etopade-demo` is only for emulators. The signed-in Google account’s existing project is a different app and is not used.
+
 ### Next work
 
-- Phase 5: pastor dashboard.
-- Phase 6-10: administrator tools, availability, notifications, deployment.
+- Create or choose a dedicated Firebase project, then build with that project’s web config and deploy Hosting, Auth, and Firestore rules.
 
-Bookings are stored on this device until a Supabase project is connected. The row matches the `bookings` table. The local password is still a stand-in until Supabase Auth is connected.
+Local development uses the Firebase emulators under the project id `etopade-demo`. Prototype security rules are in `firestore.rules` and should be reviewed before the app is shared widely.

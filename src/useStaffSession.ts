@@ -1,18 +1,31 @@
 import { useEffect, useState } from 'react'
-import { readStaffSession, type StaffSession } from './staffSession'
+import { onAuthStateChanged } from 'firebase/auth'
+import type { StaffAccount } from './auth'
+import { loadAccount } from './churchApi'
+import { auth } from './firebaseApp'
 
 export function useStaffSession() {
-  const [session, setSession] = useState<StaffSession | null>(readStaffSession)
+  const [ready, setReady] = useState(false)
+  const [account, setAccount] = useState<StaffAccount | null>(null)
 
   useEffect(() => {
-    const sync = () => setSession(readStaffSession())
-    window.addEventListener('etopade-staff', sync)
-    window.addEventListener('storage', sync)
-    return () => {
-      window.removeEventListener('etopade-staff', sync)
-      window.removeEventListener('storage', sync)
-    }
+    return onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        setAccount(null)
+        setReady(true)
+        return
+      }
+      loadAccount(user)
+        .then((next) => {
+          setAccount(next)
+          setReady(true)
+        })
+        .catch(() => {
+          setAccount(null)
+          setReady(true)
+        })
+    })
   }, [])
 
-  return session
+  return { ready, account }
 }

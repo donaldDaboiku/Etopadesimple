@@ -76,7 +76,13 @@ function digitCount(value: string) {
   return (value.match(/\d/g) ?? []).length
 }
 
-export function validateBooking(draft: BookingDraft, now = new Date(), taken: string[] = []): BookingErrors {
+export function validateBooking(
+  draft: BookingDraft,
+  now = new Date(),
+  taken: string[] = [],
+  allowedPastorIds = pastors.map((pastor) => pastor.id),
+  schedule: { weekdays: number[]; slots: string[]; blockedDates: string[] } | null = null,
+): BookingErrors {
   const errors: BookingErrors = {}
   const name = draft.fullName.trim()
   const email = draft.email.trim()
@@ -84,7 +90,7 @@ export function validateBooking(draft: BookingDraft, now = new Date(), taken: st
   const notes = draft.notes.trim()
   const membership = draft.membership.trim()
 
-  if (!pastors.some((pastor) => pastor.id === draft.pastorId)) errors.pastorId = 'Choose a pastor.'
+  if (!allowedPastorIds.includes(draft.pastorId)) errors.pastorId = 'Choose a pastor.'
   if (!appointmentTypes.some((type) => type.id === draft.appointmentTypeId)) {
     errors.appointmentTypeId = 'Choose an appointment category.'
   }
@@ -110,7 +116,16 @@ export function validateBooking(draft: BookingDraft, now = new Date(), taken: st
   if (!draft.slot) errors.slot = 'Choose a time slot.'
   else if (!SLOT_TIMES.includes(draft.slot as (typeof SLOT_TIMES)[number])) errors.slot = 'Choose one of the listed time slots.'
 
-  if (draft.date && draft.slot && !errors.slot) {
+  if (schedule && draft.date && !errors.date) {
+    const day = scheduledAt(draft.date, '00:00')
+    const closed = !day || !schedule.weekdays.includes(day.getDay()) || schedule.blockedDates.includes(draft.date)
+    if (closed) errors.date = 'That pastor is not available on this day.'
+    else if (draft.slot && !errors.slot && !schedule.slots.includes(draft.slot)) {
+      errors.slot = 'That time is outside this pastor’s hours.'
+    }
+  }
+
+  if (draft.date && draft.slot && !errors.date && !errors.slot) {
     const when = scheduledAt(draft.date, draft.slot)
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate())
     const latest = new Date(today)
@@ -125,12 +140,5 @@ export function validateBooking(draft: BookingDraft, now = new Date(), taken: st
     }
   }
 
-  return errors
-}
-
-export function validateSignIn(email: string, password: string) {
-  const errors: { email?: string; password?: string } = {}
-  if (!emailPattern.test(email.trim()) || email.trim().length > 254) errors.email = 'Enter a valid email address.'
-  if (password.length < 8) errors.password = 'Use at least 8 characters.'
   return errors
 }

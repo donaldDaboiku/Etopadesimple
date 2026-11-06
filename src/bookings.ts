@@ -1,9 +1,8 @@
+import { reportView } from './auth.ts'
 import { pastors, slotKey, formatIsoDate, type BookingDraft } from './validation.ts'
 
 export const ORGANISATION_ID = '11111111-1111-4111-8111-111111111111'
 export const BRANCH_ID = '22222222-2222-4222-8222-222222222222'
-const STORAGE_KEY = 'etopade.bookings'
-
 export type BookingRecord = {
   id: string
   organisation_id: string
@@ -16,7 +15,7 @@ export type BookingRecord = {
   contact_method: string
   meeting_mode: string
   scheduled_for: string
-  status: 'pending'
+  status: 'pending' | 'confirmed' | 'declined'
   notes: string | null
   booking_reference: string
   created_at: string
@@ -28,6 +27,10 @@ export function scheduledFor(date: string, slot: string) {
   return new Date(year, month - 1, day, hour, minute, 0, 0).toISOString()
 }
 
+export function holdDocumentId(pastorId: string, date: string, slot: string) {
+  return `${pastorId}_${date}_${slot.replace(':', '-')}`
+}
+
 export function slotKeyFromRecord(record: BookingRecord) {
   const when = new Date(record.scheduled_for)
   const slot = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
@@ -35,7 +38,21 @@ export function slotKeyFromRecord(record: BookingRecord) {
 }
 
 export function activeSlotKeys(records: BookingRecord[]) {
-  return records.filter((record) => record.status === 'pending').map(slotKeyFromRecord)
+  return records.filter((record) => record.status === 'pending' || record.status === 'confirmed').map(slotKeyFromRecord)
+}
+
+export function decideBooking(
+  records: BookingRecord[],
+  bookingId: string,
+  pastorId: string,
+  status: 'confirmed' | 'declined',
+) {
+  const index = records.findIndex((record) => record.id === bookingId)
+  const record = records[index]
+  if (!record || record.pastor_id !== pastorId || record.status !== 'pending') return { error: 'forbidden' as const }
+  const next = records.slice()
+  next[index] = { ...record, status }
+  return { records: next }
 }
 
 function bookingReference() {
@@ -72,35 +89,25 @@ export function addBooking(records: BookingRecord[], draft: BookingDraft, now = 
   return { records: [...records, record], record }
 }
 
-export function readBookings(): BookingRecord[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    const parsed = raw ? JSON.parse(raw) : []
-    return Array.isArray(parsed) ? parsed.filter((item) => item && typeof item.id === 'string') : []
-  } catch {
-    return []
-  }
-}
-
-export function writeBookings(records: BookingRecord[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(records))
-}
-
-export function commitBooking(draft: BookingDraft, now = new Date()) {
-  const saved = addBooking(readBookings(), draft, now)
-  if ('error' in saved) return saved
-  writeBookings(saved.records)
-  return saved
-}
-
-export function describeBooking(record: BookingRecord) {
+export function describeBooking(record: BookingRecord, pastorNames: { id: string; name: string }[] = pastors) {
   const when = new Date(record.scheduled_for)
-  const pastor = pastors.find((item) => item.id === record.pastor_id)?.name ?? 'Pastor'
+  const pastor = pastorNames.find((item) => item.id === record.pastor_id)?.name ?? 'Pastor'
   const slot = `${String(when.getHours()).padStart(2, '0')}:${String(when.getMinutes()).padStart(2, '0')}`
   return {
     pastor,
     when: `${formatIsoDate(when)} at ${slot}`,
   }
+}
+
+export function bookingsVisibleTo(
+  records: BookingRecord[],
+  role: string | null | undefined,
+  pastorId: string | null | undefined,
+) {
+  const view = reportView(role)
+  if (view === 'church') return records
+  if (view === 'own' && pastorId) return records.filter((record) => record.pastor_id === pastorId)
+  return []
 }
 
 export function countBookings(records: BookingRecord[], pastorId?: string | null) {

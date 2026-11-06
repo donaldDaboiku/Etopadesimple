@@ -234,6 +234,32 @@ a.secondary-button {
   font-size: 1.8rem;
 }
 
+.capability-list {
+  list-style: none;
+  margin: 18px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.capability-list li {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 14px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+.capability-list strong {
+  color: #102b4d;
+}
+
+.capability-list span {
+  color: #456181;
+  line-height: 1.5;
+}
+
 .snapshot-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -400,6 +426,107 @@ textarea:focus {
   transform: none;
 }
 
+.hours-card,
+.notice-card {
+  margin: 20px 0;
+  padding: 24px;
+}
+
+.notice-list {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.notice-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.notice-list .secondary-button {
+  padding: 0.45rem 0.75rem;
+}
+
+.hours-card .slot-list + .slot-list {
+  margin-top: 12px;
+}
+
+.calendar {
+  margin: 18px 0;
+}
+
+.calendar-nav {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.calendar-nav strong {
+  color: #102b4d;
+}
+
+.calendar-nav-button {
+  padding: 0.45rem 0.75rem;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.calendar-dow {
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #456181;
+}
+
+.day-button {
+  background: #eff5ff;
+  color: #234a7d;
+  padding: 0.55rem 0.2rem;
+  font-weight: 700;
+  border: none;
+  border-radius: 10px;
+  font: inherit;
+  cursor: pointer;
+}
+
+.day-button.taken {
+  box-shadow: inset 0 -3px 0 #9a7a2f;
+}
+
+.day-button.closed {
+  background: #f4efe7;
+  color: #8a8172;
+}
+
+.day-button.outside {
+  background: transparent;
+  color: transparent;
+}
+
+.day-button[aria-pressed='true'] {
+  background: #0d2d52;
+  color: #fff;
+}
+
+.day-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.day-button.outside:disabled {
+  opacity: 0;
+}
+
 .input-invalid {
   border-color: #9b473d;
 }
@@ -555,6 +682,41 @@ textarea {
   top: -6px;
 }
 
+.appointment-list {
+  display: grid;
+  gap: 14px;
+  margin-top: 24px;
+}
+
+.appointment-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: center;
+  padding: 22px 24px;
+}
+
+.appointment-row h2 {
+  margin: 4px 0;
+  color: #102b4d;
+  font-size: 1.25rem;
+}
+
+.appointment-row .auth-copy {
+  margin: 0;
+}
+
+.appointment-actions {
+  display: flex;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.appointment-actions .primary-button,
+.appointment-actions .secondary-button {
+  padding: 0.65rem 0.95rem;
+}
+
 .next-steps {
   margin-top: 22px;
   padding-top: 18px;
@@ -608,8 +770,12 @@ textarea {
   }
 
   .cta-row,
-  .form-actions {
+  .form-actions,
+  .appointment-row,
+  .appointment-actions,
+  .notice-list li {
     flex-direction: column;
+    align-items: stretch;
   }
 
   .stats-grid {
