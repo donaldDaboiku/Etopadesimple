@@ -561,6 +561,10 @@ textarea:focus {
   line-height: 1.5;
 }
 
+.sign-out-error {
+  margin-top: 16px;
+}
+
 .form-banner.error,
 .auth-message.error {
   background: #fdecea;

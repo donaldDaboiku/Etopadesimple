@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import './App.css'
 import { AppLink } from './AppLink'
 import { BookingPage } from './pages/BookingPage'
@@ -27,8 +27,20 @@ const pages = {
 function App() {
   const path = usePath()
   const { ready, account } = useStaffSession()
+  const [signOutError, setSignOutError] = useState('')
   const Page = pages[path as keyof typeof pages]
   const showDashboard = path !== '/login' && Boolean(account)
+
+  async function logOut() {
+    setSignOutError('')
+    try {
+      await signOutStaff()
+    } catch {
+      setSignOutError('Sign-out did not finish. You are still signed in.')
+      return
+    }
+    if (path === '/reports' || path === '/dashboard' || path === '/admin') navigate('/')
+  }
 
   useEffect(() => {
     const title = pageTitle(path)
@@ -60,10 +72,7 @@ function App() {
             <button
               type="button"
               className="secondary-button"
-              onClick={() => {
-                void signOutStaff()
-                if (path === '/reports' || path === '/dashboard' || path === '/admin') navigate('/')
-              }}
+              onClick={() => void logOut()}
             >
               Log out
             </button>
@@ -74,6 +83,11 @@ function App() {
           </AppLink>
         )}
       </header>
+      {signOutError ? (
+        <p className="form-banner error sign-out-error" role="alert">
+          {signOutError}
+        </p>
+      ) : null}
 
       <main className="page">{Page ? <Page /> : <MissingPage />}</main>
       <footer className="site-footer">

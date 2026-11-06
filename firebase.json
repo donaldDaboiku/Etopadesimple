@@ -8,7 +8,7 @@
     "providers": {
       "googleSignIn": {
         "oAuthBrandDisplayName": "ETOPADE",
-        "supportEmail": "mshelconstructionoperation@gmail.com"
+        "supportEmail": "donalddaboiku@gmail.com"
       }
     },
     "authorizedDomains": ["localhost", "etopade.firebaseapp.com", "etopade.web.app"]
