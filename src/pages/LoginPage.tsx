@@ -1,8 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { isStaffRole } from '../auth'
-import { signInWithPassword } from '../firebaseApp'
+import { loadAccount } from '../churchApi'
+import { auth, signInWithPassword, signOutStaff } from '../firebaseApp'
 import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
+
+const notCreated = 'An administrator must create your account before you can sign in.'
 
 export function LoginPage() {
   const { ready, account } = useStaffSession()
@@ -22,7 +25,18 @@ export function LoginPage() {
     try {
       await signInWithPassword(email, password)
     } catch {
-      setError('That email or password is not recognised.')
+      setError(notCreated)
+      return
+    }
+    try {
+      const staff = auth.currentUser ? await loadAccount(auth.currentUser) : null
+      if (!staff) {
+        await signOutStaff()
+        setError(notCreated)
+      }
+    } catch {
+      await signOutStaff().catch(() => undefined)
+      setError(notCreated)
     }
   }
 
@@ -31,7 +45,7 @@ export function LoginPage() {
       <p className="eyebrow-small">Staff access</p>
       <h1>Log in</h1>
       <p className="auth-copy">
-        Sign in with the email and password stored for your role. A super admin can add the church administrator from the dashboard.
+        An administrator creates your account first. Sign in with the email and password they gave you.
       </p>
       {error ? (
         <p className="auth-message error" role="alert">
