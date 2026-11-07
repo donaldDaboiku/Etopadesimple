@@ -1,8 +1,8 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { visitorBooking } from '../auth'
 import { defaultSchedule, monthKey, shiftMonth, slotsOn, type WeekSchedule } from '../availability'
-import { AppLink } from '../AppLink'
 import { createBooking, listOpenSlotKeys, listPastors, listSchedules } from '../churchApi'
+import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
 import { describeBooking } from '../bookings'
 import { Field } from '../Field'
@@ -127,6 +127,10 @@ export function BookingPage() {
   const { draft, confirmation, notice } = session
 
   useEffect(() => {
+    if (ready && account && !visitorBooking(account.role)) navigate('/dashboard')
+  }, [ready, account])
+
+  useEffect(() => {
     listPastors()
       .then((rows) => {
         if (rows.length > 0) setPastorOptions(rows)
@@ -228,18 +232,7 @@ export function BookingPage() {
   }
 
   if (!ready) return <p className="auth-copy">Checking sign-in...</p>
-  if (!visitorBooking(account?.role)) {
-    return (
-      <section className="card login-card">
-        <p className="eyebrow-small">Secretary</p>
-        <h1>Booking</h1>
-        <p className="auth-copy">Booking requests are not part of the secretary role.</p>
-        <AppLink className="primary-button" to="/dashboard">
-          Dashboard
-        </AppLink>
-      </section>
-    )
-  }
+  if (!visitorBooking(account?.role)) return null
 
   return (
     <section className="content-grid">
