@@ -26,14 +26,14 @@ await ensureUser('ama.mensah@grace.example')
 
 const admin = await asUser('ruth.owusu@grace.example')
 if (admin.role !== 'church_admin') throw new Error('Ruth is not the administrator')
-const added = await createStaff({ name: 'Grace Mensah', email: 'grace.mensah@grace.example', role: 'pastor', password: 'etopade-demo' })
+const added = await createStaff('grace', { name: 'Grace Mensah', email: 'grace.mensah@grace.example', role: 'pastor', password: 'etopade-demo' })
 if ('error' in added) throw new Error(`Could not add pastor: ${added.error}`)
 await signOut(auth)
 
 const pastors = await getDocs(collection(db, 'organisations', 'grace', 'pastors'))
 if (!pastors.docs.some((item) => item.data().name === 'Grace Mensah')) throw new Error('New pastor was not saved')
 
-const saved = await createBooking({
+const saved = await createBooking('grace', {
   pastorId: 'd1111111-1111-4111-8111-111111111111',
   appointmentTypeId: '33333333-3333-4333-8333-333333333333',
   date: '2026-12-01',
@@ -50,20 +50,20 @@ if ('error' in saved) throw new Error('Public booking was rejected')
 
 let jamesSawAll = false
 await asUser('james.adebayo@grace.example')
-const own = await listBookings('d1111111-1111-4111-8111-111111111111')
+const own = await listBookings('grace', 'd1111111-1111-4111-8111-111111111111')
 if (!own.some((row) => row.visitor_name === 'Miriam Oduro')) throw new Error('Pastor cannot see their booking')
 try {
-  await listBookings(null)
+  await listBookings('grace', null)
   jamesSawAll = true
 } catch {
   jamesSawAll = false
 }
 if (jamesSawAll) throw new Error('Pastor can read every booking')
-await decideRemote(saved.record.id, 'confirmed')
+await decideRemote('grace', saved.record.id, 'confirmed')
 await signOut(auth)
 
 await asUser('ama.mensah@grace.example')
-const church = await listBookings(null)
+const church = await listBookings('grace', null)
 if (!church.some((row) => row.visitor_name === 'Miriam Oduro' && row.status === 'confirmed')) {
   throw new Error('Secretary cannot see the confirmed booking')
 }

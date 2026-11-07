@@ -16,6 +16,7 @@ const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ def
 const PastorsPage = lazy(() => import('./pages/PastorsPage').then((module) => ({ default: module.PastorsPage })))
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })))
+const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
 
 const pages = {
   '/': OverviewPage,
@@ -25,6 +26,7 @@ const pages = {
   '/dashboard': DashboardPage,
   '/admin': AdminPage,
   '/login': LoginPage,
+  '/signup': SignupPage,
 }
 
 function App() {

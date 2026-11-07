@@ -2,17 +2,20 @@ import { useEffect, useState } from 'react'
 import { AppLink } from '../AppLink'
 import { listPastors } from '../churchApi'
 import { initials } from '../format'
+import { useStaffSession } from '../useStaffSession'
 import { pastors as fallbackPastors } from '../validation'
 
 export function PastorsPage() {
+  const { ready, organisationId } = useStaffSession()
   const [pastors, setPastors] = useState(fallbackPastors)
   useEffect(() => {
-    listPastors()
+    if (!ready) return
+    listPastors(organisationId)
       .then((rows) => {
-        if (rows.length > 0) setPastors(rows)
+        if (rows.length > 0 || organisationId !== 'grace') setPastors(rows)
       })
       .catch(() => undefined)
-  }, [])
+  }, [ready, organisationId])
 
   return (
     <>
@@ -29,7 +32,14 @@ export function PastorsPage() {
             </span>
             <h2>{pastor.name}</h2>
             <p>Prayer, counselling, and pastoral visits.</p>
-            <AppLink className="secondary-button" to={`/booking?pastor=${pastor.id}`}>
+            <AppLink
+              className="secondary-button"
+              to={
+                organisationId === 'grace'
+                  ? `/booking?pastor=${pastor.id}`
+                  : `/booking?pastor=${pastor.id}&org=${organisationId}`
+              }
+            >
               Request a time
             </AppLink>
           </article>

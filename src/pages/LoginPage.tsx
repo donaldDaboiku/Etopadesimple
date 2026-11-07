@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { isStaffRole } from '../auth'
 import { loadAccount } from '../churchApi'
 import { auth, signInWithPassword, signOutStaff } from '../firebaseApp'
+import { AppLink } from '../AppLink'
 import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
 
@@ -97,6 +98,9 @@ export function LoginPage() {
           {busy ? 'Signing in...' : 'Log in'}
         </button>
       </form>
+      <p className="auth-copy">
+        <AppLink to="/signup">Register your church</AppLink>
+      </p>
     </section>
   )
 }

@@ -42,6 +42,17 @@ export async function signInWithPassword(email: string, password: string) {
   await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
 }
 
+export async function signUpWithPassword(email: string, password: string) {
+  const credential = await createUserWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
+  return credential.user
+}
+
+export async function deleteSignedInUser() {
+  const current = auth.currentUser
+  if (!current) return
+  await current.delete()
+}
+
 function secondaryStaffAuth() {
   const name = 'staff-create'
   const secondary = getApps().find((app) => app.name === name) ?? initializeApp(firebaseApp.options, name)

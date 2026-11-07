@@ -29,7 +29,7 @@ function clock(iso: string) {
 }
 
 export function DashboardPage() {
-  const { ready, account } = useStaffSession()
+  const { ready, account, organisationId } = useStaffSession()
   const [records, setRecords] = useState<BookingRecord[]>([])
   const [schedule, setSchedule] = useState<WeekSchedule | null>(null)
   const [error, setError] = useState('')
@@ -50,13 +50,13 @@ export function DashboardPage() {
   useEffect(() => {
     if (!account?.pastorId) return
     const pastorId = account.pastorId
-    listBookings(pastorId)
+    listBookings(organisationId, pastorId)
       .then(setRecords)
       .catch(() => setError('Appointments could not be loaded.'))
-    listSchedules()
+    listSchedules(organisationId)
       .then((rows) => setSchedule(rows[pastorId] ?? defaultSchedule()))
       .catch(() => setError('Hours could not be loaded.'))
-  }, [account])
+  }, [account, organisationId])
 
   if (!ready) return <p className="auth-copy">Checking sign-in...</p>
   if (!account) {
@@ -159,7 +159,7 @@ export function DashboardPage() {
     setError('')
     setNotice('')
     try {
-      const saved = await saveSchedule(pastorId, schedule)
+      const saved = await saveSchedule(organisationId, pastorId, schedule)
       if ('error' in saved) setError(saved.error)
       else {
         setSchedule(saved.schedule)
@@ -174,8 +174,8 @@ export function DashboardPage() {
     setError('')
     setSavingId(bookingId)
     try {
-      await decideRemote(bookingId, status)
-      setRecords(await listBookings(pastorId))
+      await decideRemote(organisationId, bookingId, status)
+      setRecords(await listBookings(organisationId, pastorId))
       setNotice(status === 'confirmed' ? 'Appointment confirmed.' : 'Appointment declined.')
     } catch {
       setError('That request could not be updated.')
@@ -215,7 +215,7 @@ export function DashboardPage() {
           <strong>{declined}</strong>
         </article>
       </section>
-      <NoticeList pastorId={pastorId} />
+      <NoticeList organisationId={organisationId} pastorId={pastorId} />
       <div className="tabs" role="group" aria-label="Filter appointments">
         {filters.map((item) => (
           <button

@@ -100,7 +100,7 @@ function storeSession(value: SessionForm) {
 }
 
 export function BookingPage() {
-  const { ready, account } = useStaffSession()
+  const { ready, account, organisationId } = useStaffSession()
   const [session, setSession] = useState<SessionForm>(readSession)
   const [errors, setErrors] = useState<BookingErrors>({})
   const [pastorOptions, setPastorOptions] = useState(pastors)
@@ -126,18 +126,19 @@ export function BookingPage() {
   }, [ready, account])
 
   useEffect(() => {
-    listPastors()
+    if (!ready) return
+    listPastors(organisationId)
       .then((rows) => {
-        if (rows.length > 0) setPastorOptions(rows)
+        if (rows.length > 0 || organisationId !== 'grace') setPastorOptions(rows)
       })
       .catch(() => setServiceError(loadError))
-    listOpenSlotKeys()
+    listOpenSlotKeys(organisationId)
       .then(setTaken)
       .catch(() => setServiceError(loadError))
-    listSchedules()
+    listSchedules(organisationId)
       .then(setSchedules)
       .catch(() => setServiceError(loadError))
-  }, [])
+  }, [ready, organisationId])
 
   function saveSession(next: SessionForm) {
     storeSession(next)
@@ -204,8 +205,8 @@ export function BookingPage() {
     setSaving(true)
     setServiceError('')
     try {
-      const saved = await createBooking(draft)
-      setTaken(await listOpenSlotKeys())
+      const saved = await createBooking(organisationId, draft)
+      setTaken(await listOpenSlotKeys(organisationId))
       if ('error' in saved) {
         if (saved.error === 'closed') {
           setErrors({ date: 'That pastor is not available on this day.' })

@@ -6,6 +6,7 @@ const titles: Record<string, string> = {
   '/dashboard': 'Dashboard',
   '/admin': 'Admin',
   '/login': 'Log in',
+  '/signup': 'Register your church',
 }
 
 export function normalizePath(path: string) {

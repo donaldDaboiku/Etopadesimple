@@ -1,17 +1,19 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { isChurchAdmin, roleLabels } from '../auth'
 import { Field } from '../Field'
-import { createStaff, listStaff, type DirectoryMember } from '../churchApi'
+import { createStaff, listOrganisations, listStaff, type DirectoryMember, type OrganisationSummary } from '../churchApi'
 import { initials } from '../format'
 import { AppLink } from '../AppLink'
-import { useStaffSession } from '../useStaffSession'
+import { openOrganisation, useStaffSession } from '../useStaffSession'
 import { validateStaffInvite, type StaffInvite } from '../staff'
 
 const emptyInvite = (): StaffInvite => ({ name: '', email: '', role: 'pastor', password: '' })
 
 export function AdminPage() {
-  const { ready, account } = useStaffSession()
+  const { ready, account, organisationId } = useStaffSession()
   const [staff, setStaff] = useState<DirectoryMember[]>([])
+  const [churches, setChurches] = useState<OrganisationSummary[]>([])
+  const [churchError, setChurchError] = useState('')
   const [invite, setInvite] = useState<StaffInvite>(emptyInvite)
   const [errors, setErrors] = useState<Partial<Record<'name' | 'email' | 'password' | 'form', string>>>({})
   const [notice, setNotice] = useState('')
@@ -20,9 +22,16 @@ export function AdminPage() {
 
   useEffect(() => {
     if (!account || !isChurchAdmin(account.role)) return
-    listStaff()
+    listStaff(organisationId)
       .then(setStaff)
       .catch(() => setErrors({ form: 'The staff list could not be loaded.' }))
+  }, [account, organisationId])
+
+  useEffect(() => {
+    if (account?.role !== 'super_admin') return
+    listOrganisations()
+      .then(setChurches)
+      .catch(() => setChurchError('Churches could not be loaded.'))
   }, [account])
 
   if (!ready) return <p className="auth-copy">Checking sign-in...</p>
@@ -47,7 +56,7 @@ export function AdminPage() {
     if (nextErrors.name || nextErrors.email || nextErrors.role || nextErrors.password) return
     setSaving(true)
     try {
-      const saved = await createStaff(invite)
+      const saved = await createStaff(organisationId, invite)
       if ('error' in saved) {
         setErrors({
           email: saved.error === 'exists' ? 'That email is already on the church directory.' : 'Check the name, email, and password.',
@@ -58,7 +67,7 @@ export function AdminPage() {
       setInvite(emptyInvite())
       setShowPassword(false)
       setNotice(`${name} can sign in with ${saved.email}.`)
-      setStaff(await listStaff())
+      setStaff(await listStaff(organisationId))
     } finally {
       setSaving(false)
     }
@@ -75,6 +84,33 @@ export function AdminPage() {
             : 'Add a pastor or a secretary. They sign in with the email and password you set here.'}
         </p>
       </header>
+      {account.role === 'super_admin' ? (
+        <section className="card report-list">
+          <h2>Churches</h2>
+          {churchError ? (
+            <p className="form-banner error" role="alert">
+              {churchError}
+            </p>
+          ) : null}
+          {churches.length === 0 ? (
+            <p className="auth-copy">No churches have been registered yet.</p>
+          ) : (
+            <ul className="data-list">
+              {churches.map((church) => (
+                <li key={church.id}>
+                  <div className="data-main">
+                    <strong>{church.name}</strong>
+                    <span>{church.id === organisationId ? 'Open now' : 'Church'}</span>
+                  </div>
+                  <button type="button" className="secondary-button btn-sm" onClick={() => openOrganisation(church.id)}>
+                    Open
+                  </button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </section>
+      ) : null}
       <section className="content-grid">
         <form className="card stack-form" onSubmit={(event) => void submit(event)} noValidate>
           <h2>Add a person</h2>

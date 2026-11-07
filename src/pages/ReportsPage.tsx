@@ -16,7 +16,7 @@ function appointmentWhen(iso: string) {
 }
 
 export function ReportsPage() {
-  const { ready, account } = useStaffSession()
+  const { ready, account, organisationId } = useStaffSession()
   const view = reportView(account?.role)
   const [records, setRecords] = useState<BookingRecord[]>([])
   const [pastorNames, setPastorNames] = useState<{ id: string; name: string }[]>([])
@@ -27,14 +27,14 @@ export function ReportsPage() {
     if (!account || !view) return
     const pastorId = view === 'own' ? account.pastorId : null
     if (view === 'own' && !pastorId) return
-    Promise.all([listPastors(), listBookings(pastorId), listAudits(pastorId)])
+    Promise.all([listPastors(organisationId), listBookings(organisationId, pastorId), listAudits(organisationId, pastorId)])
       .then(([names, rows, activity]) => {
         setPastorNames(names)
         setRecords(rows)
         setAudits(activity)
       })
       .catch(() => setError('Reports could not be loaded.'))
-  }, [account, view])
+  }, [account, view, organisationId])
 
   if (!ready) return <p className="auth-copy">Checking sign-in...</p>
   if (!account || !view) {
@@ -77,7 +77,9 @@ export function ReportsPage() {
           {error}
         </p>
       ) : null}
-      {view === 'church' || account.pastorId ? <NoticeList pastorId={view === 'own' ? account.pastorId : null} /> : null}
+      {view === 'church' || account.pastorId ? (
+        <NoticeList organisationId={organisationId} pastorId={view === 'own' ? account.pastorId : null} />
+      ) : null}
       <section className="stats-grid" aria-label="Booking totals">
         {metrics.map((metric) => (
           <article key={metric.label} className={`stat-card ${metric.tone}`}>

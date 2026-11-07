@@ -2,23 +2,23 @@ import { useEffect, useState } from 'react'
 import { listNotices, listSeenNoticeIds, markNoticeRead, type NoticeItem } from './churchApi'
 import { noticeText, unseenIds } from './notices'
 
-export function NoticeList({ pastorId }: { pastorId: string | null }) {
+export function NoticeList({ organisationId, pastorId }: { organisationId: string; pastorId: string | null }) {
   const [items, setItems] = useState<NoticeItem[]>([])
   const [error, setError] = useState('')
 
   useEffect(() => {
-    Promise.all([listNotices(pastorId), listSeenNoticeIds()])
+    Promise.all([listNotices(organisationId, pastorId), listSeenNoticeIds(organisationId)])
       .then(([notices, seen]) => {
         const open = new Set(unseenIds(notices.map((notice) => notice.id), seen))
         setItems(notices.filter((notice) => open.has(notice.id)))
       })
       .catch(() => setError('Notifications could not be loaded.'))
-  }, [pastorId])
+  }, [organisationId, pastorId])
 
   async function dismiss(id: string) {
     setError('')
     try {
-      await markNoticeRead(id)
+      await markNoticeRead(organisationId, id)
       setItems((current) => current.filter((notice) => notice.id !== id))
     } catch {
       setError('That notification could not be dismissed.')

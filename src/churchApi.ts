@@ -16,17 +16,26 @@ import {
 import type { StaffAccount, StaffRole } from './auth.ts'
 import { isStaffRole } from './auth.ts'
 import { BRANCH_ID, buildBooking, holdDocumentId, ORGANISATION_ID, type BookingRecord } from './bookings.ts'
-import { auth, createPasswordAccount, db } from './firebaseApp.ts'
+import { auth, createPasswordAccount, db, deleteSignedInUser, signOutStaff, signUpWithPassword } from './firebaseApp.ts'
 import { noticeDocumentId, type NoticeKind, type NoticeScope } from './notices.ts'
 import { auditDocumentId, type AuditAction } from './reports.ts'
 import { staffEmailKey, validateStaffInvite, type StaffInvite } from './staff.ts'
+import {
+  canOpenChurch,
+  churchSignupMember,
+  GRACE_CHURCH_ID,
+  isOrganisationId,
+  newOrganisationId,
+  validateChurchSignup,
+  type ChurchSignup,
+} from './signup.ts'
 import { defaultSchedule, normalizeSchedule, scheduleError, slotsOn, type WeekSchedule } from './availability.ts'
 import type { BookingDraft } from './validation.ts'
 
-export const CHURCH_ID = 'grace'
+export const CHURCH_ID = GRACE_CHURCH_ID
 
-function churchCollection(name: string) {
-  return collection(db, 'organisations', CHURCH_ID, name)
+function churchCollection(orgId: string, name: string) {
+  return collection(db, 'organisations', orgId, name)
 }
 
 function toRecord(id: string, data: Record<string, unknown>): BookingRecord {
@@ -51,8 +60,8 @@ function toRecord(id: string, data: Record<string, unknown>): BookingRecord {
   }
 }
 
-export async function listPastors() {
-  const snap = await getDocs(churchCollection('pastors'))
+export async function listPastors(orgId: string) {
+  const snap = await getDocs(churchCollection(orgId, 'pastors'))
   return snap.docs
     .filter((item) => item.data().active !== false)
     .map((item) => ({ id: item.id, name: String(item.data().name ?? 'Pastor') }))
@@ -69,24 +78,25 @@ function toSchedule(data: Record<string, unknown>): WeekSchedule {
   })
 }
 
-export async function listSchedules() {
-  const snap = await getDocs(churchCollection('availability'))
+export async function listSchedules(orgId: string) {
+  const snap = await getDocs(churchCollection(orgId, 'availability'))
   return Object.fromEntries(snap.docs.map((item) => [item.id, toSchedule(item.data())]))
 }
 
 export async function saveSchedule(
+  orgId: string,
   pastorId: string,
   schedule: WeekSchedule,
 ): Promise<{ error: string } | { schedule: WeekSchedule }> {
   const clean = normalizeSchedule(schedule)
   const problem = scheduleError(clean)
   if (problem !== null) return { error: problem }
-  await setDoc(doc(db, 'organisations', CHURCH_ID, 'availability', pastorId), clean)
+  await setDoc(doc(db, 'organisations', orgId, 'availability', pastorId), clean)
   return { schedule: clean }
 }
 
-export async function listOpenSlotKeys() {
-  const snap = await getDocs(churchCollection('slotHolds'))
+export async function listOpenSlotKeys(orgId: string) {
+  const snap = await getDocs(churchCollection(orgId, 'slotHolds'))
   return snap.docs
     .filter((item) => item.data().status === 'pending' || item.data().status === 'confirmed')
     .map((item) => {
@@ -96,8 +106,8 @@ export async function listOpenSlotKeys() {
 }
 
 // Standard where() rather than a Firestore pipeline: these screens need one equality filter, and the local emulator serves that API.
-export async function listBookings(pastorId: string | null) {
-  const bookings = churchCollection('bookings')
+export async function listBookings(orgId: string, pastorId: string | null) {
+  const bookings = churchCollection(orgId, 'bookings')
   const snap = pastorId ? await getDocs(query(bookings, where('pastorId', '==', pastorId))) : await getDocs(bookings)
   return snap.docs.map((item) => toRecord(item.id, item.data()))
 }
@@ -112,6 +122,7 @@ export type NoticeItem = {
 }
 
 async function writeNotice(input: {
+  orgId: string
   bookingId: string
   scope: NoticeScope
   kind: NoticeKind
@@ -122,7 +133,7 @@ async function writeNotice(input: {
 }) {
   const id = noticeDocumentId(input.bookingId, input.scope, input.kind)
   try {
-    await setDoc(doc(db, 'organisations', CHURCH_ID, 'notices', id), {
+    await setDoc(doc(db, 'organisations', input.orgId, 'notices', id), {
       scope: input.scope,
       pastorId: input.scope === 'pastor' ? input.pastorId : null,
       bookingId: input.bookingId,
@@ -137,8 +148,8 @@ async function writeNotice(input: {
   }
 }
 
-export async function listNotices(pastorId: string | null) {
-  const notices = churchCollection('notices')
+export async function listNotices(orgId: string, pastorId: string | null) {
+  const notices = churchCollection(orgId, 'notices')
   const snap = pastorId
     ? await getDocs(query(notices, where('pastorId', '==', pastorId)))
     : await getDocs(query(notices, where('scope', '==', 'office')))
@@ -159,10 +170,10 @@ export async function listNotices(pastorId: string | null) {
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 }
 
-export async function listSeenNoticeIds() {
+export async function listSeenNoticeIds(orgId: string) {
   const email = auth.currentUser?.email ? staffEmailKey(auth.currentUser.email) : ''
   if (!email) return []
-  const snap = await getDocs(query(churchCollection('noticeReads'), where('email', '==', email)))
+  const snap = await getDocs(query(churchCollection(orgId, 'noticeReads'), where('email', '==', email)))
   return snap.docs.map((item) => String(item.data().noticeId ?? ''))
 }
 
@@ -176,6 +187,7 @@ export type AuditItem = {
 }
 
 async function writeAudit(input: {
+  orgId: string
   bookingId: string
   pastorId: string
   action: AuditAction
@@ -184,7 +196,7 @@ async function writeAudit(input: {
   bookingReference: string
 }) {
   try {
-    await setDoc(doc(db, 'organisations', CHURCH_ID, 'audits', auditDocumentId(input.bookingId, input.action)), {
+    await setDoc(doc(db, 'organisations', input.orgId, 'audits', auditDocumentId(input.bookingId, input.action)), {
       bookingId: input.bookingId,
       pastorId: input.pastorId,
       action: input.action,
@@ -198,8 +210,8 @@ async function writeAudit(input: {
   }
 }
 
-export async function listAudits(pastorId: string | null) {
-  const audits = churchCollection('audits')
+export async function listAudits(orgId: string, pastorId: string | null) {
+  const audits = churchCollection(orgId, 'audits')
   const snap = pastorId ? await getDocs(query(audits, where('pastorId', '==', pastorId))) : await getDocs(audits)
   return snap.docs
     .map((item) => {
@@ -218,21 +230,21 @@ export async function listAudits(pastorId: string | null) {
     .sort((left, right) => right.createdAt.localeCompare(left.createdAt))
 }
 
-export async function markNoticeRead(noticeId: string) {
+export async function markNoticeRead(orgId: string, noticeId: string) {
   const email = auth.currentUser?.email ? staffEmailKey(auth.currentUser.email) : ''
   if (!email) return
-  await setDoc(doc(db, 'organisations', CHURCH_ID, 'noticeReads', `${email}__${noticeId}`), { email, noticeId })
+  await setDoc(doc(db, 'organisations', orgId, 'noticeReads', `${email}__${noticeId}`), { email, noticeId })
 }
 
-export async function createBooking(draft: BookingDraft) {
-  const scheduleSnap = await getDoc(doc(db, 'organisations', CHURCH_ID, 'availability', draft.pastorId))
+export async function createBooking(orgId: string, draft: BookingDraft) {
+  const scheduleSnap = await getDoc(doc(db, 'organisations', orgId, 'availability', draft.pastorId))
   if (scheduleSnap.exists() && !slotsOn(toSchedule(scheduleSnap.data()), draft.date).includes(draft.slot)) {
     return { error: 'closed' as const }
   }
   const record = buildBooking(draft)
   const holdId = holdDocumentId(draft.pastorId, draft.date, draft.slot)
-  const holdRef = doc(db, 'organisations', CHURCH_ID, 'slotHolds', holdId)
-  const bookingRef = doc(db, 'organisations', CHURCH_ID, 'bookings', record.id)
+  const holdRef = doc(db, 'organisations', orgId, 'slotHolds', holdId)
+  const bookingRef = doc(db, 'organisations', orgId, 'bookings', record.id)
   try {
     await runTransaction(db, async (transaction) => {
       const hold = await transaction.get(holdRef)
@@ -274,9 +286,10 @@ export async function createBooking(draft: BookingDraft) {
     date: draft.date,
     slot: draft.slot,
   }
-  await writeNotice({ ...notice, scope: 'pastor', kind: 'requested' })
-  await writeNotice({ ...notice, scope: 'office', kind: 'requested' })
+  await writeNotice({ ...notice, orgId, scope: 'pastor', kind: 'requested' })
+  await writeNotice({ ...notice, orgId, scope: 'office', kind: 'requested' })
   await writeAudit({
+    orgId,
     bookingId: record.id,
     pastorId: record.pastor_id,
     action: 'requested',
@@ -287,19 +300,20 @@ export async function createBooking(draft: BookingDraft) {
   return { record }
 }
 
-export async function decideRemote(bookingId: string, status: 'confirmed' | 'declined') {
-  const bookingRef = doc(db, 'organisations', CHURCH_ID, 'bookings', bookingId)
+export async function decideRemote(orgId: string, bookingId: string, status: 'confirmed' | 'declined') {
+  const bookingRef = doc(db, 'organisations', orgId, 'bookings', bookingId)
   const snap = await getDoc(bookingRef)
   const data = snap.exists() ? snap.data() : null
   const holdId = data ? String(data.holdId ?? '') : ''
   await updateDoc(bookingRef, { status })
   if (holdId) {
-    const holdRef = doc(db, 'organisations', CHURCH_ID, 'slotHolds', holdId)
+    const holdRef = doc(db, 'organisations', orgId, 'slotHolds', holdId)
     if (status === 'confirmed') await updateDoc(holdRef, { status: 'confirmed' })
     else await deleteDoc(holdRef)
   }
   if (!data) return
   await writeNotice({
+    orgId,
     bookingId,
     scope: 'office',
     kind: status,
@@ -311,6 +325,7 @@ export async function decideRemote(bookingId: string, status: 'confirmed' | 'dec
   const actor = auth.currentUser?.email ? staffEmailKey(auth.currentUser.email) : ''
   if (!actor) return
   await writeAudit({
+    orgId,
     bookingId,
     pastorId: String(data.pastorId ?? ''),
     action: status,
@@ -320,10 +335,8 @@ export async function decideRemote(bookingId: string, status: 'confirmed' | 'dec
   })
 }
 
-export async function loadAccount(user: User): Promise<StaffAccount | null> {
-  const email = user.email ? staffEmailKey(user.email) : ''
-  if (!email) return null
-  const memberRef = doc(db, 'organisations', CHURCH_ID, 'members', email)
+async function readMember(orgId: string, email: string, user: User): Promise<StaffAccount | null> {
+  const memberRef = doc(db, 'organisations', orgId, 'members', email)
   const snap = await getDoc(memberRef)
   if (!snap.exists()) return null
   const data = snap.data()
@@ -341,13 +354,88 @@ export async function loadAccount(user: User): Promise<StaffAccount | null> {
     name: String(data.name ?? user.displayName ?? email),
     role: data.role as StaffRole,
     pastorId: typeof data.pastorId === 'string' ? data.pastorId : null,
+    organisationId: orgId,
   }
+}
+
+export async function loadAccount(user: User): Promise<StaffAccount | null> {
+  const email = user.email ? staffEmailKey(user.email) : ''
+  if (!email) return null
+  const graceAccount = await readMember(CHURCH_ID, email, user)
+  if (graceAccount) return graceAccount
+  try {
+    const pointer = await getDoc(doc(db, 'directory', email))
+    const orgId = pointer.exists() ? pointer.data().organisationId : ''
+    if (typeof orgId === 'string' && isOrganisationId(orgId) && orgId !== CHURCH_ID) {
+      return readMember(orgId, email, user)
+    }
+  } catch {
+    return null
+  }
+  return null
+}
+
+export type OrganisationSummary = { id: string; name: string }
+
+export async function listOrganisations(): Promise<OrganisationSummary[]> {
+  const snap = await getDocs(collection(db, 'organisations'))
+  return snap.docs
+    .map((item) => ({ id: item.id, name: String(item.data().name ?? item.id) }))
+    .sort((left, right) => left.name.localeCompare(right.name))
+}
+
+export async function registerChurch(input: ChurchSignup) {
+  const errors = validateChurchSignup(input)
+  if (errors.churchName || errors.adminName || errors.email || errors.password || errors.confirmPassword) {
+    return { error: 'invalid' as const }
+  }
+  const email = staffEmailKey(input.email)
+  let user
+  try {
+    user = await signUpWithPassword(email, input.password)
+  } catch (error) {
+    const code = error && typeof error === 'object' && 'code' in error ? String(error.code) : ''
+    if (code === 'auth/email-already-in-use') return { error: 'exists' as const }
+    if (code === 'auth/invalid-email' || code === 'auth/weak-password' || code === 'auth/missing-password') {
+      return { error: 'invalid' as const }
+    }
+    return { error: 'unavailable' as const }
+  }
+  const orgId = newOrganisationId(input.churchName)
+  const member = churchSignupMember({ name: input.adminName, email, uid: user.uid })
+  const allowed =
+    member !== null &&
+    orgId !== CHURCH_ID &&
+    canOpenChurch({
+      orgAdminEmail: email,
+      memberEmail: member.email,
+      memberRole: member.role,
+      memberUid: member.uid,
+      authEmail: user.email ?? email,
+      authUid: user.uid,
+      alreadyHasAdmin: false,
+    })
+  if (!allowed || !member) {
+    await deleteSignedInUser().catch(() => undefined)
+    return { error: 'invalid' as const }
+  }
+  try {
+    // ponytail: a second organisation document can be created before the directory write lands. The member path still accepts only this email as church_admin. Upgrade path: a create-once signup lock document.
+    await setDoc(doc(db, 'organisations', orgId), { name: input.churchName.trim(), adminEmail: email })
+    await setDoc(doc(db, 'organisations', orgId, 'members', email), member)
+    await setDoc(doc(db, 'directory', email), { organisationId: orgId })
+  } catch {
+    await deleteSignedInUser().catch(() => undefined)
+    await signOutStaff().catch(() => undefined)
+    return { error: 'unavailable' as const }
+  }
+  return { organisationId: orgId }
 }
 
 export type DirectoryMember = StaffAccount & { status: string }
 
-export async function listStaff(): Promise<DirectoryMember[]> {
-  const snap = await getDocs(churchCollection('members'))
+export async function listStaff(orgId: string): Promise<DirectoryMember[]> {
+  const snap = await getDocs(churchCollection(orgId, 'members'))
   return snap.docs
     .map((item) => {
       const data = item.data()
@@ -357,6 +445,7 @@ export async function listStaff(): Promise<DirectoryMember[]> {
         name: String(data.name ?? ''),
         role: data.role as StaffRole,
         pastorId: typeof data.pastorId === 'string' ? data.pastorId : null,
+        organisationId: orgId,
         status: String(data.status ?? 'invited'),
       }
     })
@@ -364,11 +453,13 @@ export async function listStaff(): Promise<DirectoryMember[]> {
     .sort((left, right) => left.name.localeCompare(right.name))
 }
 
-export async function createStaff(invite: StaffInvite) {
+export async function createStaff(orgId: string, invite: StaffInvite) {
   const errors = validateStaffInvite(invite)
   if (errors.name || errors.email || errors.role || errors.password) return { error: 'invalid' as const }
+  const requestedRole: string = invite.role
+  if (requestedRole === 'super_admin') return { error: 'invalid' as const }
   const email = staffEmailKey(invite.email)
-  const memberRef = doc(db, 'organisations', CHURCH_ID, 'members', email)
+  const memberRef = doc(db, 'organisations', orgId, 'members', email)
   const existing = await getDoc(memberRef)
   if (existing.exists()) return { error: 'exists' as const }
   try {
@@ -384,11 +475,11 @@ export async function createStaff(invite: StaffInvite) {
   if ((await getDoc(memberRef)).exists()) return { error: 'exists' as const }
   const pastorId = invite.role === 'pastor' ? crypto.randomUUID() : null
   if (pastorId) {
-    await setDoc(doc(db, 'organisations', CHURCH_ID, 'pastors', pastorId), {
+    await setDoc(doc(db, 'organisations', orgId, 'pastors', pastorId), {
       name: invite.name.trim(),
       active: true,
     })
-    await setDoc(doc(db, 'organisations', CHURCH_ID, 'availability', pastorId), defaultSchedule())
+    await setDoc(doc(db, 'organisations', orgId, 'availability', pastorId), defaultSchedule())
   }
   await setDoc(memberRef, {
     email,
@@ -398,5 +489,6 @@ export async function createStaff(invite: StaffInvite) {
     uid: null,
     status: 'invited',
   })
+  if (orgId !== CHURCH_ID) await setDoc(doc(db, 'directory', email), { organisationId: orgId })
   return { email }
 }

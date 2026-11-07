@@ -7,6 +7,7 @@ export type StaffAccount = {
   name: string
   role: StaffRole
   pastorId: string | null
+  organisationId: string
 }
 
 export const roleLabels: Record<StaffRole, string> = {
