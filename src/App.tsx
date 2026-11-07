@@ -9,6 +9,7 @@ import { OverviewPage } from './pages/OverviewPage'
 import { PastorsPage } from './pages/PastorsPage'
 import { ReportsPage } from './pages/ReportsPage'
 import { AdminPage } from './pages/AdminPage'
+import { visitorBooking } from './auth'
 import { pageTitle } from './route'
 import { signOutStaff } from './firebaseApp'
 import { usePath, navigate } from './usePath'
@@ -61,7 +62,7 @@ function App() {
 
         <nav className="main-nav" aria-label="Main navigation">
           <AppLink to="/">Overview</AppLink>
-          <AppLink to="/booking">Booking</AppLink>
+          {visitorBooking(account?.role) ? <AppLink to="/booking">Booking</AppLink> : null}
           <AppLink to="/pastors">Pastors</AppLink>
           {showDashboard ? <AppLink to="/dashboard">Dashboard</AppLink> : null}
         </nav>

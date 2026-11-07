@@ -1,6 +1,9 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { visitorBooking } from '../auth'
 import { defaultSchedule, monthKey, shiftMonth, slotsOn, type WeekSchedule } from '../availability'
+import { AppLink } from '../AppLink'
 import { createBooking, listOpenSlotKeys, listPastors, listSchedules } from '../churchApi'
+import { useStaffSession } from '../useStaffSession'
 import { describeBooking } from '../bookings'
 import { Field } from '../Field'
 import { MonthCalendar } from '../MonthCalendar'
@@ -103,6 +106,7 @@ function storeSession(value: SessionForm) {
 }
 
 export function BookingPage() {
+  const { ready, account } = useStaffSession()
   const [session, setSession] = useState<SessionForm>(readSession)
   const [errors, setErrors] = useState<BookingErrors>({})
   const [pastorOptions, setPastorOptions] = useState(pastors)
@@ -221,6 +225,20 @@ export function BookingPage() {
     } catch {
       setServiceError('The request could not be saved in Firebase.')
     }
+  }
+
+  if (!ready) return <p className="auth-copy">Checking sign-in...</p>
+  if (!visitorBooking(account?.role)) {
+    return (
+      <section className="card login-card">
+        <p className="eyebrow-small">Secretary</p>
+        <h1>Booking</h1>
+        <p className="auth-copy">Booking requests are not part of the secretary role.</p>
+        <AppLink className="primary-button" to="/dashboard">
+          Dashboard
+        </AppLink>
+      </section>
+    )
   }
 
   return (

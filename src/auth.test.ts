@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { isChurchAdmin, pastorDashboard, reportView } from './auth.ts'
+import { isChurchAdmin, pastorDashboard, reportView, visitorBooking } from './auth.ts'
 
 test('reports and dashboards follow the signed-in role', () => {
   assert.equal(reportView('pastor'), 'own')
@@ -12,7 +12,14 @@ test('reports and dashboards follow the signed-in role', () => {
   assert.equal(reportView('visitor'), null)
   assert.equal(reportView(null), null)
   assert.equal(pastorDashboard('pastor'), true)
+  assert.equal(pastorDashboard('assistant_pastor'), true)
   assert.equal(pastorDashboard('secretary'), false)
+  assert.equal(visitorBooking(null), true)
+  assert.equal(visitorBooking('pastor'), true)
+  assert.equal(visitorBooking('assistant_pastor'), true)
+  assert.equal(visitorBooking('church_admin'), true)
+  assert.equal(visitorBooking('super_admin'), true)
+  assert.equal(visitorBooking('secretary'), false)
   assert.equal(isChurchAdmin('church_admin'), true)
   assert.equal(isChurchAdmin('pastor'), false)
   assert.equal(isChurchAdmin('secretary'), false)

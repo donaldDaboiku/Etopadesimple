@@ -25,7 +25,7 @@ export function LoginPage() {
     try {
       await signInWithPassword(email, password)
     } catch {
-      setError(notCreated)
+      setError('That email or password is not recognised.')
       return
     }
     try {

@@ -47,9 +47,8 @@ export function AdminPage() {
       setErrors({ email: saved.error === 'exists' ? 'That email is already on the church directory.' : 'Check the name, email, and password.' })
       return
     }
-    const issuedPassword = invite.password
     setInvite(emptyInvite())
-    setNotice(`${invite.name.trim()} can sign in with ${saved.email} and password ${issuedPassword}.`)
+    setNotice(`${invite.name.trim()} can sign in with ${saved.email}.`)
     setStaff(await listStaff())
   }
 

@@ -30,6 +30,10 @@ export function pastorDashboard(role: string | null | undefined) {
   return role === 'pastor' || role === 'assistant_pastor'
 }
 
+export function visitorBooking(role: string | null | undefined) {
+  return role !== 'secretary'
+}
+
 export function reportView(role: string | null | undefined): 'own' | 'church' | null {
   if (role === 'pastor' || role === 'assistant_pastor') return 'own'
   if (role === 'secretary' || role === 'church_admin' || role === 'super_admin') return 'church'
