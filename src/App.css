@@ -46,15 +46,25 @@
   color: var(--heading);
 }
 
+.brand-mark,
+.page-logo {
+  display: block;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: #f7f4ee;
+}
+
 .brand-mark {
   width: 42px;
   height: 42px;
-  display: grid;
-  place-items: center;
-  border-radius: 14px;
-  background: var(--accent);
-  color: var(--accent-text);
-  font-weight: 800;
+  border-radius: 12px;
+}
+
+.page-logo {
+  width: 88px;
+  height: 88px;
+  margin: 0 0 14px;
+  border-radius: 20px;
 }
 
 .brand-copy {

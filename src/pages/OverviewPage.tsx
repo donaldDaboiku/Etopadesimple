@@ -17,6 +17,7 @@ export function OverviewPage() {
     <>
       <section className="hero card">
         <div className="hero-copy">
+          <img className="page-logo" src="/logo.png" alt="ETOPADE" width={88} height={88} />
           <p className="eyebrow">ETOPADE</p>
           <h1>Book time with your pastor in under two minutes.</h1>
           <p className="lede">

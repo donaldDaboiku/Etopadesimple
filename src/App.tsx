@@ -60,7 +60,7 @@ function App() {
       </a>
       <header className="topbar">
         <AppLink className="brand" to="/">
-          <span className="brand-mark">E</span>
+          <img className="brand-mark" src="/logo.png" alt="ETOPADE" width={42} height={42} />
           <span className="brand-copy">
             <span>ETOPADE</span>
             <small>Pastoral appointment system</small>

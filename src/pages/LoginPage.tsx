@@ -49,6 +49,7 @@ export function LoginPage() {
 
   return (
     <section className="card login-card">
+      <img className="page-logo" src="/logo.png" alt="ETOPADE" width={88} height={88} />
       <p className="eyebrow">Staff access</p>
       <h1>Log in</h1>
       <p className="auth-copy">
