@@ -1,10 +1,11 @@
 import { useEffect, useState, type FormEvent } from 'react'
+import { AppLink } from '../AppLink'
 import { visitorBooking } from '../auth'
 import { defaultSchedule, monthKey, shiftMonth, slotsOn, type WeekSchedule } from '../availability'
 import { createBooking, listOpenSlotKeys, listPastors, listSchedules } from '../churchApi'
+import { formatLongDate, formatTime } from '../format'
 import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
-import { describeBooking } from '../bookings'
 import { Field } from '../Field'
 import { MonthCalendar } from '../MonthCalendar'
 import {
@@ -33,14 +34,7 @@ const fieldOrder: (keyof BookingDraft)[] = [
   'membership',
   'notes',
 ]
-
-const findings = [
-  'Name, email, phone, notice period, and the 90-day window are checked before submit.',
-  'A pending or confirmed booking already stored for that pastor and time is rejected.',
-  'Times follow that pastor’s weekly hours. A blocked day cannot be requested.',
-  'Each accepted request is stored as a pending booking in Firebase.',
-  'Visitors can request a booking without reading private appointment records.',
-]
+const loadError = 'We could not load open times. Refresh the page and try again.'
 
 type Confirmation = {
   reference: string
@@ -113,6 +107,7 @@ export function BookingPage() {
   const [taken, setTaken] = useState<string[]>([])
   const [schedules, setSchedules] = useState<Record<string, WeekSchedule>>({})
   const [serviceError, setServiceError] = useState('')
+  const [saving, setSaving] = useState(false)
   const [{ today, maxDate, cursor }] = useState(() => {
     const now = new Date()
     const latest = new Date(now)
@@ -135,13 +130,13 @@ export function BookingPage() {
       .then((rows) => {
         if (rows.length > 0) setPastorOptions(rows)
       })
-      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+      .catch(() => setServiceError(loadError))
     listOpenSlotKeys()
       .then(setTaken)
-      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+      .catch(() => setServiceError(loadError))
     listSchedules()
       .then(setSchedules)
-      .catch(() => setServiceError('Firebase is not running, so pastors and open times cannot be loaded.'))
+      .catch(() => setServiceError(loadError))
   }, [])
 
   function saveSession(next: SessionForm) {
@@ -183,6 +178,12 @@ export function BookingPage() {
     saveSession({ ...session, notice: 'Draft saved on this device.' })
   }
 
+  function startAnother() {
+    saveSession({ draft: applyPastorQuery(emptyBooking()), confirmation: null, notice: '' })
+    setErrors({})
+    setServiceError('')
+  }
+
   async function submitBooking(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const nextErrors = validateBooking(
@@ -200,6 +201,8 @@ export function BookingPage() {
       return
     }
 
+    setSaving(true)
+    setServiceError('')
     try {
       const saved = await createBooking(draft)
       setTaken(await listOpenSlotKeys())
@@ -222,221 +225,297 @@ export function BookingPage() {
           reference: saved.record.booking_reference,
           pastor,
           category,
-          when: describeBooking(saved.record, pastorOptions).when,
+          when: `${formatLongDate(draft.date)} at ${formatTime(draft.slot)}`,
         },
         notice: '',
       })
     } catch {
-      setServiceError('The request could not be saved in Firebase.')
+      setServiceError('Your request could not be sent. Please try again.')
+    } finally {
+      setSaving(false)
     }
   }
 
   if (!ready) return <p className="auth-copy">Checking sign-in...</p>
   if (!visitorBooking(account?.role)) return null
 
+  if (confirmation) {
+    return (
+      <section className="card login-card">
+        <p className="eyebrow">Request received</p>
+        <h1>Your request is in</h1>
+        <p className="auth-copy">Keep this reference number. The pastor will confirm or decline.</p>
+        <p className="reference">{confirmation.reference}</p>
+        <p className="auth-copy">
+          {confirmation.pastor} · {confirmation.category} · {confirmation.when}
+        </p>
+        <div className="cta-row">
+          <button type="button" className="primary-button" onClick={startAnother}>
+            Make another request
+          </button>
+          <AppLink className="secondary-button" to="/">
+            Back to home
+          </AppLink>
+        </div>
+      </section>
+    )
+  }
+
+  const pastorName = pastorOptions.find((pastor) => pastor.id === draft.pastorId)?.name ?? 'Choose a pastor'
+  const purposeName = appointmentTypes.find((item) => item.id === draft.appointmentTypeId)?.name ?? 'Choose a purpose'
+  const whenLabel =
+    draft.date && draft.slot
+      ? `${formatLongDate(draft.date)} at ${formatTime(draft.slot)}`
+      : draft.date
+        ? `${formatLongDate(draft.date)} — choose a time`
+        : 'Choose a day and time'
+  const offeredSlots = draft.date ? slotsOn(scheduleFor(draft.pastorId), draft.date) : []
+
   return (
-    <section className="content-grid">
-      <form className="booking-form card" aria-label="Public booking form" onSubmit={(event) => void submitBooking(event)} noValidate>
-        <div className="section-header">
-          <div>
-            <p className="eyebrow-small">Public booking portal</p>
-            <h2>Request an appointment</h2>
-          </div>
-          <span className="status-pill">Open</span>
-        </div>
+    <>
+      <header className="page-heading">
+        <p className="eyebrow">Booking</p>
+        <h1>Request a time</h1>
+        <p className="auth-copy">Choose a pastor, an open time, and how we should reach you.</p>
+      </header>
+      <div className="content-grid">
+        <form className="booking-form card" aria-label="Public booking form" onSubmit={(event) => void submitBooking(event)} noValidate>
+          {serviceError ? (
+            <p className="form-banner error" role="alert">
+              {serviceError}
+            </p>
+          ) : null}
+          {notice ? (
+            <p className="form-banner success" role="status">
+              {notice}
+            </p>
+          ) : null}
 
-        {confirmation ? (
-          <p className="form-banner success" role="status">
-            Request {confirmation.reference} is pending for {confirmation.pastor}, {confirmation.category}, on {confirmation.when}.
-          </p>
-        ) : null}
-        {serviceError ? (
-          <p className="form-banner error" role="alert">
-            {serviceError}
-          </p>
-        ) : null}
-        {notice ? (
-          <p className="form-banner success" role="status">
-            {notice}
-          </p>
-        ) : null}
-
-        <div className="field-grid">
-          <Field id="field-pastorId" label="Select pastor" error={errors.pastorId}>
-            <select value={draft.pastorId} onChange={(event) => choosePastor(event.target.value)}>
-              {pastorOptions.map((pastor) => (
-                <option key={pastor.id} value={pastor.id}>
-                  {pastor.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field id="field-appointmentTypeId" label="Appointment category" error={errors.appointmentTypeId}>
-            <select value={draft.appointmentTypeId} onChange={(event) => update('appointmentTypeId', event.target.value)}>
-              {appointmentTypes.map((category) => (
-                <option key={category.id} value={category.id}>
-                  {category.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-
-          <Field id="field-contactMethod" label="Contact method" error={errors.contactMethod}>
-            <select value={draft.contactMethod} onChange={(event) => update('contactMethod', event.target.value)}>
-              <option value="email">Email</option>
-              <option value="whatsapp">WhatsApp</option>
-              <option value="sms">SMS</option>
-            </select>
-          </Field>
-        </div>
-
-        <div className="slot-group" id="field-date" tabIndex={-1}>
-          <span>Preferred date</span>
-          <MonthCalendar
-            year={monthCursor.year}
-            month={monthCursor.month}
-            onPrev={() => setMonthCursor((current) => shiftMonth(current, -1))}
-            onNext={() => setMonthCursor((current) => shiftMonth(current, 1))}
-            prevDisabled={monthKey(monthCursor) <= today.slice(0, 7)}
-            nextDisabled={monthKey(monthCursor) >= maxDate.slice(0, 7)}
-            dayPressed={(date) => draft.date === date}
-            dayLabel={(date) => date}
-            dayDisabled={(date, inMonth) => !inMonth || date < today || date > maxDate || slotsOn(scheduleFor(draft.pastorId), date).length === 0}
-            dayClass={(date, inMonth) => {
-              if (!inMonth || date < today || date > maxDate) return 'outside'
-              const offered = slotsOn(scheduleFor(draft.pastorId), date)
-              if (offered.length === 0) return 'closed'
-              if (offered.every((slot) => taken.includes(slotKey(draft.pastorId, date, slot)))) return 'taken'
-              return 'open'
-            }}
-            onPick={chooseDate}
-          />
-          {errors.date ? <small className="field-error">{errors.date}</small> : null}
-        </div>
-
-        <div className="slot-group" id="field-slot" tabIndex={-1}>
-          <span>Available time slots</span>
-          {!draft.date ? (
-            <p className="auth-copy">Choose an open day to see this pastor’s times.</p>
-          ) : slotsOn(scheduleFor(draft.pastorId), draft.date).length === 0 ? (
-            <p className="auth-copy">That pastor does not take appointments on this day.</p>
-          ) : (
-            <div className="slot-list" role="group" aria-describedby={errors.slot ? 'field-slot-error' : undefined}>
-              {slotsOn(scheduleFor(draft.pastorId), draft.date).map((slot) => {
-                const unavailable = taken.includes(slotKey(draft.pastorId, draft.date, slot))
-                return (
-                  <button
-                    type="button"
-                    key={slot}
-                    className="slot-button"
-                    aria-pressed={draft.slot === slot}
-                    disabled={unavailable}
-                    onClick={() => update('slot', slot)}
-                  >
-                    {unavailable ? `${slot} taken` : slot}
-                  </button>
-                )
-              })}
+          <fieldset>
+            <legend>1. Who and why</legend>
+            <div className="field-grid">
+              <Field id="field-pastorId" label="Pastor" error={errors.pastorId}>
+                <select value={draft.pastorId} onChange={(event) => choosePastor(event.target.value)}>
+                  {pastorOptions.map((pastor) => (
+                    <option key={pastor.id} value={pastor.id}>
+                      {pastor.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
+              <Field id="field-appointmentTypeId" label="Purpose" error={errors.appointmentTypeId}>
+                <select value={draft.appointmentTypeId} onChange={(event) => update('appointmentTypeId', event.target.value)}>
+                  {appointmentTypes.map((category) => (
+                    <option key={category.id} value={category.id}>
+                      {category.name}
+                    </option>
+                  ))}
+                </select>
+              </Field>
             </div>
-          )}
-          {errors.slot ? (
-            <small id="field-slot-error" className="field-error">
-              {errors.slot}
-            </small>
-          ) : null}
-        </div>
+            <div className="slot-group">
+              <span id="meeting-mode-label" className="meeting-label">
+                In person or online
+              </span>
+              <div
+                id="field-meetingMode"
+                className="choice-row"
+                role="radiogroup"
+                aria-labelledby="meeting-mode-label"
+                tabIndex={-1}
+              >
+                <label className={draft.meetingMode === 'physical' ? 'choice is-selected' : 'choice'}>
+                  <input
+                    type="radio"
+                    name="meetingMode"
+                    value="physical"
+                    checked={draft.meetingMode === 'physical'}
+                    onChange={() => update('meetingMode', 'physical')}
+                  />
+                  In person
+                </label>
+                <label className={draft.meetingMode === 'virtual' ? 'choice is-selected' : 'choice'}>
+                  <input
+                    type="radio"
+                    name="meetingMode"
+                    value="virtual"
+                    checked={draft.meetingMode === 'virtual'}
+                    onChange={() => update('meetingMode', 'virtual')}
+                  />
+                  Online
+                </label>
+              </div>
+              {errors.meetingMode ? <small className="field-error">{errors.meetingMode}</small> : null}
+            </div>
+          </fieldset>
 
-        <div className="meeting-mode">
-          <span id="meeting-mode-label">Meeting type</span>
-          <div className="toggle-row" role="radiogroup" aria-labelledby="meeting-mode-label">
-            <label>
-              <input
-                type="radio"
-                name="meetingMode"
-                value="physical"
-                checked={draft.meetingMode === 'physical'}
-                onChange={() => update('meetingMode', 'physical')}
+          <fieldset>
+            <legend>2. Date and time</legend>
+            <div id="field-date" tabIndex={-1}>
+              <MonthCalendar
+                year={monthCursor.year}
+                month={monthCursor.month}
+                onPrev={() => setMonthCursor((current) => shiftMonth(current, -1))}
+                onNext={() => setMonthCursor((current) => shiftMonth(current, 1))}
+                prevDisabled={monthKey(monthCursor) <= today.slice(0, 7)}
+                nextDisabled={monthKey(monthCursor) >= maxDate.slice(0, 7)}
+                dayPressed={(date) => draft.date === date}
+                dayDisabled={(date, inMonth) =>
+                  !inMonth || date < today || date > maxDate || slotsOn(scheduleFor(draft.pastorId), date).length === 0
+                }
+                dayClass={(date, inMonth) => {
+                  if (!inMonth || date < today || date > maxDate) return 'outside'
+                  const offered = slotsOn(scheduleFor(draft.pastorId), date)
+                  if (offered.length === 0) return 'closed'
+                  if (offered.every((slot) => taken.includes(slotKey(draft.pastorId, date, slot)))) return 'taken'
+                  return 'open'
+                }}
+                onPick={chooseDate}
               />
-              Physical
-            </label>
-            <label>
-              <input
-                type="radio"
-                name="meetingMode"
-                value="virtual"
-                checked={draft.meetingMode === 'virtual'}
-                onChange={() => update('meetingMode', 'virtual')}
+              <ul className="legend">
+                <li>
+                  <span className="swatch open" aria-hidden="true" /> Open
+                </li>
+                <li>
+                  <span className="swatch taken" aria-hidden="true" /> Fully booked
+                </li>
+                <li>
+                  <span className="swatch closed" aria-hidden="true" /> Closed
+                </li>
+                <li>
+                  <span className="swatch selected" aria-hidden="true" /> Selected
+                </li>
+              </ul>
+              {errors.date ? <small className="field-error">{errors.date}</small> : null}
+            </div>
+            <div className="slot-group" id="field-slot" tabIndex={-1}>
+              <span>Available times</span>
+              {!draft.date ? (
+                <p className="auth-copy">Choose an open day to see this pastor’s times.</p>
+              ) : offeredSlots.length === 0 ? (
+                <p className="auth-copy">That pastor does not take appointments on this day.</p>
+              ) : (
+                <div className="slot-list" role="group" aria-describedby={errors.slot ? 'field-slot-error' : undefined}>
+                  {offeredSlots.map((slot) => {
+                    const unavailable = taken.includes(slotKey(draft.pastorId, draft.date, slot))
+                    const label = formatTime(slot)
+                    return (
+                      <button
+                        type="button"
+                        key={slot}
+                        className="slot-button"
+                        aria-pressed={draft.slot === slot}
+                        disabled={unavailable}
+                        onClick={() => update('slot', slot)}
+                      >
+                        {unavailable ? `${label} (taken)` : label}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {errors.slot ? (
+                <small id="field-slot-error" className="field-error">
+                  {errors.slot}
+                </small>
+              ) : null}
+            </div>
+          </fieldset>
+
+          <fieldset>
+            <legend>3. How to reach you</legend>
+            <div className="field-grid">
+              <Field id="field-fullName" label="Full name" error={errors.fullName}>
+                <input type="text" autoComplete="name" value={draft.fullName} onChange={(event) => update('fullName', event.target.value)} />
+              </Field>
+              <Field id="field-email" label="Email address" error={errors.email}>
+                <input type="email" autoComplete="email" value={draft.email} onChange={(event) => update('email', event.target.value)} />
+              </Field>
+              <Field id="field-contactMethod" label="Contact method" error={errors.contactMethod}>
+                <select value={draft.contactMethod} onChange={(event) => update('contactMethod', event.target.value)}>
+                  <option value="email">Email</option>
+                  <option value="whatsapp">WhatsApp</option>
+                  <option value="sms">SMS</option>
+                </select>
+              </Field>
+              <Field
+                id="field-phone"
+                label={draft.contactMethod === 'email' ? 'Phone number (optional)' : 'Phone number'}
+                error={errors.phone}
+              >
+                <input type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => update('phone', event.target.value)} />
+              </Field>
+              <Field id="field-membership" label="Church membership" error={errors.membership}>
+                <input
+                  type="text"
+                  placeholder="Optional"
+                  value={draft.membership}
+                  onChange={(event) => update('membership', event.target.value)}
+                />
+              </Field>
+            </div>
+            <label className="notes-field" htmlFor="field-notes">
+              <span className="label-row">
+                <span>Notes</span>
+                <span className="counter">
+                  {draft.notes.length}/1000
+                </span>
+              </span>
+              <textarea
+                id="field-notes"
+                rows={4}
+                value={draft.notes}
+                aria-invalid={errors.notes ? true : undefined}
+                aria-describedby={errors.notes ? 'field-notes-error' : undefined}
+                className={errors.notes ? 'input-invalid' : undefined}
+                onChange={(event) => update('notes', event.target.value)}
               />
-              Virtual
+              {errors.notes ? (
+                <small id="field-notes-error" className="field-error">
+                  {errors.notes}
+                </small>
+              ) : null}
             </label>
+          </fieldset>
+
+          <div className="form-actions">
+            <button type="button" className="secondary-button" onClick={saveDraft}>
+              Save draft
+            </button>
+            <button type="submit" className="primary-button" disabled={saving}>
+              {saving ? 'Sending...' : 'Submit request'}
+            </button>
           </div>
-          {errors.meetingMode ? <small className="field-error">{errors.meetingMode}</small> : null}
-        </div>
+        </form>
 
-        <div className="field-grid compact">
-          <Field id="field-fullName" label="Full name" error={errors.fullName}>
-            <input type="text" autoComplete="name" value={draft.fullName} onChange={(event) => update('fullName', event.target.value)} />
-          </Field>
-          <Field id="field-email" label="Email address" error={errors.email}>
-            <input type="email" autoComplete="email" value={draft.email} onChange={(event) => update('email', event.target.value)} />
-          </Field>
-          <Field id="field-phone" label="Phone number" error={errors.phone}>
-            <input type="tel" autoComplete="tel" value={draft.phone} onChange={(event) => update('phone', event.target.value)} />
-          </Field>
-          <Field id="field-membership" label="Church membership" error={errors.membership}>
-            <input
-              type="text"
-              placeholder="Optional"
-              value={draft.membership}
-              onChange={(event) => update('membership', event.target.value)}
-            />
-          </Field>
-        </div>
-
-        <label className="notes-field" htmlFor="field-notes">
-          <span>Appointment notes</span>
-          <textarea
-            id="field-notes"
-            rows={4}
-            value={draft.notes}
-            aria-invalid={errors.notes ? true : undefined}
-            aria-describedby={errors.notes ? 'field-notes-error' : undefined}
-            className={errors.notes ? 'input-invalid' : undefined}
-            onChange={(event) => update('notes', event.target.value)}
-          />
-          {errors.notes ? (
-            <small id="field-notes-error" className="field-error">
-              {errors.notes}
-            </small>
-          ) : null}
-        </label>
-
-        <div className="form-actions">
-          <button type="button" className="secondary-button" onClick={saveDraft}>
-            Save draft
-          </button>
-          <button type="submit" className="primary-button">
-            Submit request
-          </button>
-        </div>
-      </form>
-
-      <aside className="audit-panel card" aria-label="Validation status">
-        <p className="eyebrow-small">Validation</p>
-        <h2>What is checked</h2>
-        <ul className="audit-list">
-          {findings.map((item) => (
-            <li key={item}>{item}</li>
-          ))}
-        </ul>
-        <div className="next-steps">
-          <h3>Next milestones</h3>
-          <ul>
-            <li>A dedicated Firebase project</li>
+        <aside className="card panel request-summary" aria-label="Your request">
+          <h2>Your request</h2>
+          <dl className="summary-list">
+            <div>
+              <dt>Pastor</dt>
+              <dd>{pastorName}</dd>
+            </div>
+            <div>
+              <dt>Purpose</dt>
+              <dd>{purposeName}</dd>
+            </div>
+            <div>
+              <dt>When</dt>
+              <dd>{whenLabel}</dd>
+            </div>
+            <div>
+              <dt>Meeting</dt>
+              <dd>{draft.meetingMode === 'virtual' ? 'Online' : 'In person'}</dd>
+            </div>
+          </dl>
+          <h3>Before you send</h3>
+          <ul className="tip-list">
+            <li>Pick an open day. Closed days follow that pastor’s own hours.</li>
+            <li>A time marked taken is already requested.</li>
+            <li>Leave a short note if the pastor should prepare for you.</li>
           </ul>
-        </div>
-      </aside>
-    </section>
+        </aside>
+      </div>
+    </>
   )
 }

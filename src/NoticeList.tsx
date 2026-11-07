@@ -25,24 +25,31 @@ export function NoticeList({ pastorId }: { pastorId: string | null }) {
     }
   }
 
+  if (items.length === 0 && !error) return null
+
   return (
     <section className="card notice-card" aria-label="Notifications">
-      <h2>Notifications</h2>
-      {error ? <p className="form-banner error">{error}</p> : null}
-      {items.length === 0 ? (
-        <p className="auth-copy">No new notifications.</p>
-      ) : (
+      <div className="section-header">
+        <h2>Notifications</h2>
+        {items.length > 0 ? <span className="badge badge-pending">{items.length} new</span> : null}
+      </div>
+      {error ? (
+        <p className="form-banner error" role="alert">
+          {error}
+        </p>
+      ) : null}
+      {items.length > 0 ? (
         <ul className="notice-list">
           {items.map((notice) => (
             <li key={notice.id}>
               <span>{noticeText(notice.kind, notice.visitorName, notice.date, notice.slot)}</span>
-              <button type="button" className="secondary-button" onClick={() => void dismiss(notice.id)}>
+              <button type="button" className="secondary-button btn-sm" onClick={() => void dismiss(notice.id)}>
                 Dismiss
               </button>
             </li>
           ))}
         </ul>
-      )}
+      ) : null}
     </section>
   )
 }

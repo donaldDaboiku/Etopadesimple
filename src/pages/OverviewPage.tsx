@@ -1,54 +1,61 @@
 import { AppLink } from '../AppLink'
 
-const capabilities = [
-  {
-    title: 'Visitors request a time',
-    text: 'A request records the purpose, the day, and whether the meeting is in person or virtual. A time already taken cannot be requested again.',
-  },
-  {
-    title: 'Each role has its own dashboard',
-    text: 'After sign-in, a pastor, an assistant, a secretary, and a church administrator each open the work that belongs to that role.',
-  },
-  {
-    title: 'Hours belong to the pastor',
-    text: 'Open days, appointment times, and closed dates come from that pastor’s own schedule.',
-  },
+const steps = [
+  { title: 'Choose a pastor', text: 'Say who you want to meet and what the conversation is for.' },
+  { title: 'Pick an open time', text: 'The calendar shows days that still have a free slot.' },
+  { title: 'Send your request', text: 'Leave your name and how the church should reply.' },
+]
+
+const features = [
+  { title: 'A short request', text: 'Purpose, day, and whether you will meet in person or online.' },
+  { title: 'Hours that belong to the pastor', text: 'Open days and times come from that pastor’s own schedule.' },
+  { title: 'A clear reply', text: 'You keep a reference number while the pastor confirms or declines.' },
 ]
 
 export function OverviewPage() {
   return (
-    <section className="hero card">
-      <div className="hero-copy">
-        <p className="eyebrow">Secure ministry scheduling</p>
-        <h1>Pastoral care made simple, structured, and secure.</h1>
-        <p className="lede">
-          ETOPADE helps a church receive appointment requests, keep each pastor’s schedule, and give every staff member a
-          dashboard for their own work.
-        </p>
-
-        <div className="cta-row">
-          <AppLink className="primary-button" to="/booking">
-            Book a session
-          </AppLink>
-          <AppLink className="secondary-button" to="/login">
-            Log in
-          </AppLink>
+    <>
+      <section className="hero card">
+        <div className="hero-copy">
+          <p className="eyebrow">ETOPADE</p>
+          <h1>Book time with your pastor in under two minutes.</h1>
+          <p className="lede">
+            Choose a pastor, pick an open time, and send your request. You will get a reference number while the pastor
+            replies.
+          </p>
+          <div className="cta-row">
+            <AppLink className="primary-button" to="/booking">
+              Book a time
+            </AppLink>
+            <AppLink className="secondary-button" to="/login">
+              Staff log in
+            </AppLink>
+          </div>
         </div>
-      </div>
-
-      <div className="hero-panel">
-        <div className="snapshot-card">
-          <span className="panel-label">What ETOPADE does</span>
-          <ul className="capability-list">
-            {capabilities.map((item) => (
-              <li key={item.title}>
-                <strong>{item.title}</strong>
-                <span>{item.text}</span>
-              </li>
-            ))}
-          </ul>
+        <div className="hero-panel">
+          <div className="panel">
+            <h2>How it works</h2>
+            <ol className="steps">
+              {steps.map((step) => (
+                <li key={step.title}>
+                  <span>
+                    <strong>{step.title}</strong>
+                    {step.text}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          </div>
         </div>
+      </section>
+      <div className="feature-grid">
+        {features.map((feature) => (
+          <article key={feature.title} className="card feature-card">
+            <h2>{feature.title}</h2>
+            <p>{feature.text}</p>
+          </article>
+        ))}
       </div>
-    </section>
+    </>
   )
 }

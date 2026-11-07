@@ -1,4 +1,5 @@
 import { monthCells, monthLabel, WEEKDAY_LABELS } from './availability.ts'
+import { formatLongDate } from './format.ts'
 
 type MonthCalendarProps = {
   year: number
@@ -7,7 +8,7 @@ type MonthCalendarProps = {
   onNext: () => void
   prevDisabled?: boolean
   nextDisabled?: boolean
-  dayLabel: (date: string) => string
+  dayHint?: (date: string) => string
   dayDisabled: (date: string, inMonth: boolean) => boolean
   dayPressed: (date: string) => boolean
   dayClass: (date: string, inMonth: boolean) => string
@@ -21,7 +22,7 @@ export function MonthCalendar({
   onNext,
   prevDisabled,
   nextDisabled,
-  dayLabel,
+  dayHint,
   dayDisabled,
   dayPressed,
   dayClass,
@@ -29,35 +30,45 @@ export function MonthCalendar({
 }: MonthCalendarProps) {
   const label = monthLabel(year, month)
   return (
-    <div className="calendar">
+    <div className="calendar" role="group" aria-label={label}>
       <div className="calendar-nav">
-        <button type="button" className="secondary-button calendar-nav-button" onClick={onPrev} disabled={prevDisabled}>
-          Previous
+        <button type="button" className="secondary-button btn-sm" onClick={onPrev} disabled={prevDisabled} aria-label="Previous month">
+          Prev
         </button>
         <strong>{label}</strong>
-        <button type="button" className="secondary-button calendar-nav-button" onClick={onNext} disabled={nextDisabled}>
+        <button type="button" className="secondary-button btn-sm" onClick={onNext} disabled={nextDisabled} aria-label="Next month">
           Next
         </button>
       </div>
-      <div className="calendar-grid" role="grid" aria-label={label}>
+      <div className="calendar-grid">
         {WEEKDAY_LABELS.map((name) => (
-          <span key={name} className="calendar-dow">
+          <span key={name} className="calendar-dow" aria-hidden="true">
             {name}
           </span>
         ))}
-        {monthCells(year, month).map((cell) => (
-          <button
-            type="button"
-            key={cell.date}
-            className={`day-button ${dayClass(cell.date, cell.inMonth)}`}
-            disabled={dayDisabled(cell.date, cell.inMonth)}
-            aria-pressed={dayPressed(cell.date)}
-            aria-label={dayLabel(cell.date)}
-            onClick={() => onPick(cell.date)}
-          >
-            {Number(cell.date.slice(8))}
-          </button>
-        ))}
+        {monthCells(year, month).map((cell) => {
+          if (!cell.inMonth) {
+            return (
+              <button type="button" key={cell.date} className="day-button outside" aria-hidden="true" tabIndex={-1} disabled>
+                {Number(cell.date.slice(8))}
+              </button>
+            )
+          }
+          const hint = dayHint?.(cell.date)
+          return (
+            <button
+              type="button"
+              key={cell.date}
+              className={`day-button ${dayClass(cell.date, true)}`}
+              disabled={dayDisabled(cell.date, true)}
+              aria-pressed={dayPressed(cell.date)}
+              aria-label={hint ? `${formatLongDate(cell.date)}, ${hint}` : formatLongDate(cell.date)}
+              onClick={() => onPick(cell.date)}
+            >
+              {Number(cell.date.slice(8))}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

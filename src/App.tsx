@@ -1,19 +1,21 @@
-import { useEffect, useState } from 'react'
+import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import { AppLink } from './AppLink'
-import { BookingPage } from './pages/BookingPage'
-import { DashboardPage } from './pages/DashboardPage'
-import { LoginPage } from './pages/LoginPage'
+import { visitorBooking } from './auth'
+import { initials } from './format'
 import { MissingPage } from './pages/MissingPage'
 import { OverviewPage } from './pages/OverviewPage'
-import { PastorsPage } from './pages/PastorsPage'
-import { ReportsPage } from './pages/ReportsPage'
-import { AdminPage } from './pages/AdminPage'
-import { visitorBooking } from './auth'
 import { pageTitle } from './route'
 import { signOutStaff } from './firebaseApp'
-import { usePath, navigate } from './usePath'
+import { navigate, usePath } from './usePath'
 import { useStaffSession } from './useStaffSession'
+
+const BookingPage = lazy(() => import('./pages/BookingPage').then((module) => ({ default: module.BookingPage })))
+const DashboardPage = lazy(() => import('./pages/DashboardPage').then((module) => ({ default: module.DashboardPage })))
+const LoginPage = lazy(() => import('./pages/LoginPage').then((module) => ({ default: module.LoginPage })))
+const PastorsPage = lazy(() => import('./pages/PastorsPage').then((module) => ({ default: module.PastorsPage })))
+const ReportsPage = lazy(() => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
+const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })))
 
 const pages = {
   '/': OverviewPage,
@@ -29,6 +31,8 @@ function App() {
   const path = usePath()
   const { ready, account } = useStaffSession()
   const [signOutError, setSignOutError] = useState('')
+  const [menuPath, setMenuPath] = useState<string | null>(null)
+  const menuOpen = menuPath === path
   const Page = pages[path as keyof typeof pages]
   const showDashboard = path !== '/login' && Boolean(account)
 
@@ -51,8 +55,11 @@ function App() {
 
   return (
     <div className="app-shell">
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
       <header className="topbar">
-        <AppLink className="brand" to="/" >
+        <AppLink className="brand" to="/">
           <span className="brand-mark">E</span>
           <span className="brand-copy">
             <span>ETOPADE</span>
@@ -60,7 +67,17 @@ function App() {
           </span>
         </AppLink>
 
-        <nav className="main-nav" aria-label="Main navigation">
+        <button
+          type="button"
+          className="secondary-button btn-sm menu-toggle"
+          aria-expanded={menuOpen}
+          aria-controls="main-menu"
+          onClick={() => setMenuPath(menuOpen ? null : path)}
+        >
+          {menuOpen ? 'Close' : 'Menu'}
+        </button>
+
+        <nav id="main-menu" className={menuOpen ? 'main-nav is-open' : 'main-nav'} aria-label="Main navigation">
           <AppLink to="/">Overview</AppLink>
           {visitorBooking(account?.role) ? <AppLink to="/booking">Booking</AppLink> : null}
           <AppLink to="/pastors">Pastors</AppLink>
@@ -69,18 +86,19 @@ function App() {
 
         {ready && account ? (
           <div className="session-box">
-            <span>{account.name}</span>
-            <button
-              type="button"
-              className="secondary-button"
-              onClick={() => void logOut()}
-            >
+            <span className="avatar" aria-hidden="true">
+              {initials(account.name)}
+            </span>
+            <span className="session-name" title={account.name}>
+              {account.name}
+            </span>
+            <button type="button" className="secondary-button btn-sm" onClick={() => void logOut()}>
               Log out
             </button>
           </div>
         ) : (
-          <AppLink className="primary-button" to="/login">
-            Log in
+          <AppLink className="primary-button btn-sm staff-login" to="/login">
+            Staff log in
           </AppLink>
         )}
       </header>
@@ -90,7 +108,11 @@ function App() {
         </p>
       ) : null}
 
-      <main className="page">{Page ? <Page /> : <MissingPage />}</main>
+      <main id="main" className="page" tabIndex={-1}>
+        <Suspense fallback={<p className="auth-copy">Loading...</p>}>
+          {Page ? <Page /> : <MissingPage />}
+        </Suspense>
+      </main>
       <footer className="site-footer">
         <span>© 2026 ETOPADE</span>
         <span>
