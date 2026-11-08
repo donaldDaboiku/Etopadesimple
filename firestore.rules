@@ -4,10 +4,26 @@ rules_version = '2';
 // Assumed Data Model
 // ===============================================================
 //
-// organisations/grace
-//   name: string
+// organisations/{orgId}
+//   Grace Fellowship stays organisations/grace (name only).
+//   A new church is a new id, never organisations/grace, and stores:
+//   name: string (2-120)
+//   adminEmail: auth email
+//   creatorUid: auth uid
+//   claimed: true, set in the same transaction as the first member
 //
-// organisations/grace/pastors/{pastorId}
+// organisations/{orgId}/members/{lowercaseEmail}
+//   The public create path may add only the admin email, role church_admin,
+//   uid == auth.uid, pastorId null, status active. getAfter(claimed) blocks a second member.
+//   Later members are admin invites: pastor, assistant_pastor, secretary, church_admin.
+//   super_admin cannot be created here.
+//
+// directory/{lowercaseEmail}
+//   organisationId: the new church id. Not used for grace. No updates.
+//
+// Subcollections below exist on every organisations/{orgId}. Grace is the original church.
+//
+// organisations/{orgId}/pastors/{pastorId}
 //   name: string (2-120)
 //   active: bool
 //   Public read is required by the booking form.
@@ -20,6 +36,8 @@ rules_version = '2';
 //   pastorId, appointmentTypeId, visitorName, visitorEmail, visitorPhone,
 //   contactMethod, meetingMode, date, slot, scheduledFor, status, notes,
 //   bookingReference, createdAt, holdId
+//   A pastor confirms or declines only a booking with their own pastorId.
+//   A secretary of this organisation confirms or declines any booking in it.
 //
 // organisations/grace/members/{lowercaseEmail}
 //   email, name, role, pastorId, uid, status
@@ -53,31 +71,100 @@ service cloud.firestore {
       return request.auth.token.email.lower();
     }
 
-    function memberPath() {
-      return /databases/$(database)/documents/organisations/grace/members/$(emailId());
+    function isOrgId(orgId) {
+      return orgId is string
+        && orgId.size() >= 2
+        && orgId.size() <= 64
+        && orgId.matches('^[a-z0-9]+(-[a-z0-9]+)*$');
     }
 
-    function memberData() {
-      return get(memberPath()).data;
+    function orgPath(orgId) {
+      return /databases/$(database)/documents/organisations/$(orgId);
     }
 
-    function isStaff() {
-      return isAuthenticated()
-        && exists(memberPath())
-        && memberData().status == 'active'
-        && memberData().email == emailId();
+    function memberPath(orgId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/members/$(emailId());
     }
 
-    function isAdmin() {
-      return isStaff() && memberData().role in ['church_admin', 'super_admin'];
+    function memberDoc(orgId, emailKey) {
+      return /databases/$(database)/documents/organisations/$(orgId)/members/$(emailKey);
     }
 
-    function isOffice() {
-      return isStaff() && memberData().role in ['church_admin', 'super_admin', 'secretary'];
+    function directoryPath(emailKey) {
+      return /databases/$(database)/documents/directory/$(emailKey);
     }
 
-    function isPastorAccount() {
-      return isStaff() && memberData().role in ['pastor', 'assistant_pastor'];
+    function memberData(orgId) {
+      return get(memberPath(orgId)).data;
+    }
+
+    function staffRecord(orgId) {
+      let member = memberData(orgId);
+      return member.status == 'active' && member.email == emailId();
+    }
+
+    function isStaff(orgId) {
+      return isAuthenticated() && exists(memberPath(orgId)) && staffRecord(orgId);
+    }
+
+    function isAdmin(orgId) {
+      return isAuthenticated() && exists(memberPath(orgId)) && adminRecord(orgId);
+    }
+
+    function adminRecord(orgId) {
+      let member = memberData(orgId);
+      return member.status == 'active'
+        && member.email == emailId()
+        && member.role in ['church_admin', 'super_admin'];
+    }
+
+    function isOffice(orgId) {
+      return isAuthenticated() && exists(memberPath(orgId)) && officeRecord(orgId);
+    }
+
+    function officeRecord(orgId) {
+      let member = memberData(orgId);
+      return member.status == 'active'
+        && member.email == emailId()
+        && member.role in ['church_admin', 'super_admin', 'secretary'];
+    }
+
+    function isSecretary(orgId) {
+      return isAuthenticated() && exists(memberPath(orgId)) && secretaryRecord(orgId);
+    }
+
+    function secretaryRecord(orgId) {
+      let member = memberData(orgId);
+      return member.status == 'active'
+        && member.email == emailId()
+        && member.role == 'secretary';
+    }
+
+    function isPastorAccount(orgId) {
+      return isAuthenticated() && exists(memberPath(orgId)) && pastorRecord(orgId);
+    }
+
+    function pastorRecord(orgId) {
+      let member = memberData(orgId);
+      return member.status == 'active'
+        && member.email == emailId()
+        && member.role in ['pastor', 'assistant_pastor'];
+    }
+
+    // Grace is the only place a super_admin member can exist. Signup cannot create one.
+    function isPlatformAdmin() {
+      return isAuthenticated() && exists(memberPath('grace')) && platformRecord();
+    }
+
+    function platformRecord() {
+      let member = memberData('grace');
+      return member.status == 'active'
+        && member.email == emailId()
+        && member.role == 'super_admin';
+    }
+
+    function managesChurch(orgId) {
+      return isAdmin(orgId) || isPlatformAdmin();
     }
 
     function hasOnlyAllowedFields(fields) {
@@ -96,20 +183,39 @@ service cloud.firestore {
       return value is string && value.size() >= 2 && value.size() <= 120;
     }
 
-    function pastorPath(pastorId) {
-      return /databases/$(database)/documents/organisations/grace/pastors/$(pastorId);
+    function pastorPath(orgId, pastorId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/pastors/$(pastorId);
     }
 
-    function holdPath(holdId) {
-      return /databases/$(database)/documents/organisations/grace/slotHolds/$(holdId);
+    function holdPath(orgId, holdId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/slotHolds/$(holdId);
     }
 
-    function bookingPath(bookingId) {
-      return /databases/$(database)/documents/organisations/grace/bookings/$(bookingId);
+    function holdMatchesBooking(orgId, holdId) {
+      return resource.data.bookingId is string
+        && exists(bookingPath(orgId, resource.data.bookingId))
+        && get(bookingPath(orgId, resource.data.bookingId)).data.holdId == holdId
+        && get(bookingPath(orgId, resource.data.bookingId)).data.pastorId == resource.data.pastorId;
     }
 
-    function noticePath(noticeId) {
-      return /databases/$(database)/documents/organisations/grace/notices/$(noticeId);
+    function canRenameOwnProfile(orgId, emailKey) {
+      return isAuthenticated()
+        && emailKey == emailId()
+        && resource.data.status == 'active'
+        && resource.data.uid == request.auth.uid
+        && resource.data.email == emailId()
+        && resource.data.role in ['pastor', 'assistant_pastor']
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name'])
+        && validName(request.resource.data.name)
+        && isValidMember(orgId, request.resource.data, emailKey);
+    }
+
+    function bookingPath(orgId, bookingId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/bookings/$(bookingId);
+    }
+
+    function noticePath(orgId, noticeId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/notices/$(noticeId);
     }
 
     function isValidAudit(data) {
@@ -127,9 +233,10 @@ service cloud.firestore {
         && data.createdAt == request.time;
     }
 
-    function canReadNotice(data) {
-      return (isOffice() && data.scope == 'office')
-        || (isPastorAccount() && data.pastorId == memberData().pastorId);
+    function canReadNotice(orgId, data) {
+      return (isOffice(orgId) && data.scope == 'office')
+        || (isPastorAccount(orgId) && data.pastorId == memberData(orgId).pastorId)
+        || (isPlatformAdmin() && data.scope == 'office');
     }
 
     function isValidNotice(data) {
@@ -149,8 +256,8 @@ service cloud.firestore {
         );
     }
 
-    function availabilityPath(pastorId) {
-      return /databases/$(database)/documents/organisations/grace/availability/$(pastorId);
+    function availabilityPath(orgId, pastorId) {
+      return /databases/$(database)/documents/organisations/$(orgId)/availability/$(pastorId);
     }
 
     function weekdayIndex(date) {
@@ -158,12 +265,12 @@ service cloud.firestore {
       return timestamp.date(int(parts[0]), int(parts[1]), int(parts[2])).dayOfWeek() - 1;
     }
 
-    function slotFitsSchedule(data) {
-      return !exists(availabilityPath(data.pastorId))
+    function slotFitsSchedule(orgId, data) {
+      return !exists(availabilityPath(orgId, data.pastorId))
         || (
-          data.slot in get(availabilityPath(data.pastorId)).data.slots
-          && !(data.date in get(availabilityPath(data.pastorId)).data.blockedDates)
-          && get(availabilityPath(data.pastorId)).data.weekdays.hasAny([weekdayIndex(data.date)])
+          data.slot in get(availabilityPath(orgId, data.pastorId)).data.slots
+          && !(data.date in get(availabilityPath(orgId, data.pastorId)).data.blockedDates)
+          && get(availabilityPath(orgId, data.pastorId)).data.weekdays.hasAny([weekdayIndex(data.date)])
         );
     }
 
@@ -191,7 +298,7 @@ service cloud.firestore {
         && data.active is bool;
     }
 
-    function isValidHold(data) {
+    function isValidHold(orgId, data) {
       return data.keys().hasOnly(['pastorId', 'date', 'slot', 'status', 'bookingId'])
         && data.pastorId is string
         && data.date is string
@@ -200,8 +307,8 @@ service cloud.firestore {
         && data.status in ['pending', 'confirmed']
         && data.bookingId is string
         && data.bookingId.size() >= 8
-        && exists(pastorPath(data.pastorId))
-        && get(pastorPath(data.pastorId)).data.active == true;
+        && exists(pastorPath(orgId, data.pastorId))
+        && get(pastorPath(orgId, data.pastorId)).data.active == true;
     }
 
     function isValidBooking(data) {
@@ -233,74 +340,203 @@ service cloud.firestore {
         && data.holdId == data.pastorId + '_' + data.date + '_' + data.slot.replace(':', '-');
     }
 
-    function isValidMember(data, emailKey) {
+    function isValidMember(orgId, data, emailKey) {
       return data.keys().hasOnly(['email', 'name', 'role', 'pastorId', 'uid', 'status'])
         && data.email == emailKey
         && isValidEmail(data.email)
         && validName(data.name)
         && data.role in ['super_admin', 'church_admin', 'pastor', 'assistant_pastor', 'secretary', 'read_only_staff']
         && (
-          (data.role in ['pastor', 'assistant_pastor'] && data.pastorId is string && exists(pastorPath(data.pastorId)))
+          (data.role in ['pastor', 'assistant_pastor'] && data.pastorId is string && exists(pastorPath(orgId, data.pastorId)))
           || (!(data.role in ['pastor', 'assistant_pastor']) && data.pastorId == null)
         )
         && (
           (data.status == 'invited' && data.uid == null)
-          || (data.status == 'active' && data.uid is string && data.uid.size() > 0)
+          || (data.status == 'active' && data.uid is string && data.uid.size() > 0 && data.uid.size() <= 128)
         );
     }
 
-    match /organisations/grace {
-      allow read: if isStaff();
-      allow write: if false;
+    function isValidOrganisation(data) {
+      return data.keys().hasOnly(['name', 'adminEmail', 'creatorUid', 'claimed'])
+        && validName(data.name)
+        && isValidEmail(data.adminEmail)
+        && data.adminEmail == emailId()
+        && data.creatorUid is string
+        && data.creatorUid == request.auth.uid
+        && data.creatorUid.size() <= 128
+        && data.claimed == true;
+    }
+
+    function createdChurchMatches(orgId) {
+      let member = getAfter(memberDoc(orgId, emailId())).data;
+      let directory = getAfter(directoryPath(emailId())).data;
+      return member.keys().hasOnly(['email', 'name', 'role', 'pastorId', 'uid', 'status'])
+        && member.role == 'church_admin'
+        && member.email == emailId()
+        && member.uid == request.auth.uid
+        && member.status == 'active'
+        && member.pastorId == null
+        && directory.keys().hasOnly(['organisationId'])
+        && directory.organisationId == orgId;
+    }
+
+    function canCreateOrganisation(orgId) {
+      return isAuthenticated()
+        && orgId != 'grace'
+        && isOrgId(orgId)
+        && isValidOrganisation(request.resource.data)
+        && !exists(directoryPath(emailId()))
+        && createdChurchMatches(orgId);
+    }
+
+    function isBootstrapAdmin(orgId, emailKey) {
+      return isAuthenticated()
+        && orgId != 'grace'
+        && isOrgId(orgId)
+        && emailKey == emailId()
+        && !exists(orgPath(orgId))
+        && bootstrapOrgFields(orgId)
+        && isValidMember(orgId, request.resource.data, emailKey)
+        && request.resource.data.role == 'church_admin'
+        && request.resource.data.status == 'active'
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.pastorId == null
+        && request.resource.data.email == emailId();
+    }
+
+    function bootstrapOrgFields(orgId) {
+      let org = getAfter(orgPath(orgId)).data;
+      return org.claimed == true
+        && org.adminEmail == emailId()
+        && org.creatorUid == request.auth.uid
+        && org.keys().hasOnly(['name', 'adminEmail', 'creatorUid', 'claimed']);
+    }
+
+    function ownChurchMatches(orgId) {
+      let org = getAfter(orgPath(orgId)).data;
+      let member = getAfter(memberDoc(orgId, emailId())).data;
+      return org.claimed == true
+        && org.adminEmail == emailId()
+        && org.creatorUid == request.auth.uid
+        && member.role == 'church_admin'
+        && member.uid == request.auth.uid
+        && member.email == emailId()
+        && member.status == 'active';
+    }
+
+    function canPointOwnChurch(emailKey, orgId) {
+      return emailKey == emailId()
+        && !exists(orgPath(orgId))
+        && ownChurchMatches(orgId);
+    }
+
+    function invitedMemberMatches(orgId, emailKey) {
+      let member = getAfter(memberDoc(orgId, emailKey)).data;
+      return member.email == emailKey
+        && member.status == 'invited'
+        && member.uid == null
+        && member.role in ['pastor', 'assistant_pastor', 'secretary', 'church_admin'];
+    }
+
+    function canPointInvite(emailKey, orgId) {
+      return emailKey != emailId()
+        && isValidEmail(emailKey)
+        && managesChurch(orgId)
+        && invitedMemberMatches(orgId, emailKey);
+    }
+
+    function canCreateDirectory(emailKey) {
+      return isAuthenticated()
+        && request.resource.data.keys().hasOnly(['organisationId'])
+        && request.resource.data.organisationId is string
+        && isOrgId(request.resource.data.organisationId)
+        && request.resource.data.organisationId != 'grace'
+        && (
+          canPointOwnChurch(emailKey, request.resource.data.organisationId)
+          || canPointInvite(emailKey, request.resource.data.organisationId)
+        );
+    }
+
+    match /organisations/{orgId} {
+      allow get: if isStaff(orgId) || isPlatformAdmin();
+      allow list: if isPlatformAdmin();
+      allow create: if canCreateOrganisation(orgId);
+      allow update, delete: if false;
 
       match /availability/{pastorId} {
         allow read: if true;
         allow create, update: if isValidSchedule(request.resource.data)
-          && exists(pastorPath(pastorId))
+          && exists(pastorPath(orgId, pastorId))
           && (
-            isAdmin()
-            || (isPastorAccount() && memberData().pastorId == pastorId)
+            (isPastorAccount(orgId) && memberData(orgId).pastorId == pastorId)
+            || isAdmin(orgId)
+            || isPlatformAdmin()
           );
         allow delete: if false;
       }
 
       match /pastors/{pastorId} {
         allow read: if true;
-        allow create: if isAdmin() && isValidPastor(request.resource.data) && request.resource.data.active == true;
+        allow create: if managesChurch(orgId) && isValidPastor(request.resource.data) && request.resource.data.active == true;
         allow update, delete: if false;
       }
 
       match /slotHolds/{holdId} {
         allow read: if true;
-        allow create: if isValidHold(request.resource.data)
+        allow create: if isValidHold(orgId, request.resource.data)
           && request.resource.data.status == 'pending'
           && holdId == request.resource.data.pastorId + '_' + request.resource.data.date + '_' + request.resource.data.slot.replace(':', '-');
-        allow update: if isPastorAccount()
-          && resource.data.pastorId == memberData().pastorId
-          && resource.data.status == 'pending'
+        allow update: if resource.data.status == 'pending'
           && request.resource.data.status == 'confirmed'
-          && isValidHold(request.resource.data)
-          && areImmutableFieldsUnchanged(['pastorId', 'date', 'slot', 'bookingId']);
-        allow delete: if isAdmin()
-          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+          && isValidHold(orgId, request.resource.data)
+          && areImmutableFieldsUnchanged(['pastorId', 'date', 'slot', 'bookingId'])
+          && holdMatchesBooking(orgId, holdId)
+          && get(bookingPath(orgId, resource.data.bookingId)).data.status == 'confirmed'
+          && (
+            (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+            || isSecretary(orgId)
+          );
+        allow delete: if (
+            holdMatchesBooking(orgId, holdId)
+            && get(bookingPath(orgId, resource.data.bookingId)).data.status == 'declined'
+            && (
+              (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+              || isSecretary(orgId)
+              || isAdmin(orgId)
+              || isPlatformAdmin()
+            )
+          )
+          || (
+            resource.data.bookingId is string
+            && !exists(bookingPath(orgId, resource.data.bookingId))
+            && (
+              (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+              || isSecretary(orgId)
+              || isAdmin(orgId)
+              || isPlatformAdmin()
+            )
+          );
       }
 
       match /bookings/{bookingId} {
-        allow read: if isOffice()
-          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+        allow read: if isOffice(orgId)
+          || (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+          || isPlatformAdmin();
         allow create: if isValidBooking(request.resource.data)
           && request.resource.data.status == 'pending'
           && request.resource.data.createdAt == request.time
           && request.resource.data.scheduledFor > request.time + duration.value(30, 'm')
           && request.resource.data.scheduledFor < request.time + duration.value(90, 'd')
-          && exists(pastorPath(request.resource.data.pastorId))
-          && get(pastorPath(request.resource.data.pastorId)).data.active == true
-          && exists(holdPath(request.resource.data.holdId))
-          && get(holdPath(request.resource.data.holdId)).data.bookingId == bookingId
-          && get(holdPath(request.resource.data.holdId)).data.pastorId == request.resource.data.pastorId
-          && slotFitsSchedule(request.resource.data);
-        allow update: if isPastorAccount()
-          && resource.data.pastorId == memberData().pastorId
+          && exists(pastorPath(orgId, request.resource.data.pastorId))
+          && get(pastorPath(orgId, request.resource.data.pastorId)).data.active == true
+          && exists(holdPath(orgId, request.resource.data.holdId))
+          && get(holdPath(orgId, request.resource.data.holdId)).data.bookingId == bookingId
+          && get(holdPath(orgId, request.resource.data.holdId)).data.pastorId == request.resource.data.pastorId
+          && slotFitsSchedule(orgId, request.resource.data);
+        allow update: if (
+            (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+            || isSecretary(orgId)
+          )
           && resource.data.status == 'pending'
           && request.resource.data.status in ['confirmed', 'declined']
           && isValidBooking(request.resource.data)
@@ -313,87 +549,105 @@ service cloud.firestore {
       }
 
       match /notices/{noticeId} {
-        allow read: if canReadNotice(resource.data);
+        allow read: if canReadNotice(orgId, resource.data);
         allow create: if isValidNotice(request.resource.data)
           && noticeId == request.resource.data.bookingId + '_' + request.resource.data.scope + '_' + request.resource.data.kind
-          && exists(bookingPath(request.resource.data.bookingId))
-          && get(bookingPath(request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
-          && get(bookingPath(request.resource.data.bookingId)).data.date == request.resource.data.date
-          && get(bookingPath(request.resource.data.bookingId)).data.slot == request.resource.data.slot
+          && exists(bookingPath(orgId, request.resource.data.bookingId))
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.date == request.resource.data.date
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.slot == request.resource.data.slot
           && (
             request.resource.data.scope == 'office'
-            || get(bookingPath(request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
+            || get(bookingPath(orgId, request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
           )
           && (
             (
               request.resource.data.kind == 'requested'
-              && get(bookingPath(request.resource.data.bookingId)).data.status == 'pending'
+              && get(bookingPath(orgId, request.resource.data.bookingId)).data.status == 'pending'
             )
             || (
               request.resource.data.kind in ['confirmed', 'declined']
-              && get(bookingPath(request.resource.data.bookingId)).data.status == request.resource.data.kind
-              && isPastorAccount()
-              && memberData().pastorId == get(bookingPath(request.resource.data.bookingId)).data.pastorId
+              && get(bookingPath(orgId, request.resource.data.bookingId)).data.status == request.resource.data.kind
+              && (
+                (isPastorAccount(orgId) && memberData(orgId).pastorId == get(bookingPath(orgId, request.resource.data.bookingId)).data.pastorId)
+                || isSecretary(orgId)
+              )
             )
           );
         allow update, delete: if false;
       }
 
       match /noticeReads/{readId} {
-        allow read: if isStaff() && resource.data.email == emailId();
-        allow create: if isStaff()
+        allow read: if isStaff(orgId) && resource.data.email == emailId();
+        allow create: if isStaff(orgId)
           && request.resource.data.keys().hasOnly(['email', 'noticeId'])
           && request.resource.data.email == emailId()
           && request.resource.data.noticeId is string
+          && request.resource.data.noticeId.size() <= 180
           && readId == emailId() + '__' + request.resource.data.noticeId
-          && exists(noticePath(request.resource.data.noticeId))
-          && canReadNotice(get(noticePath(request.resource.data.noticeId)).data);
+          && exists(noticePath(orgId, request.resource.data.noticeId))
+          && canReadNotice(orgId, get(noticePath(orgId, request.resource.data.noticeId)).data);
         allow update, delete: if false;
       }
 
       match /audits/{auditId} {
-        allow read: if isOffice()
-          || (isPastorAccount() && resource.data.pastorId == memberData().pastorId);
+        allow read: if isOffice(orgId)
+          || (isPastorAccount(orgId) && resource.data.pastorId == memberData(orgId).pastorId)
+          || isPlatformAdmin();
         allow create: if isValidAudit(request.resource.data)
           && auditId == request.resource.data.bookingId + '_' + request.resource.data.action
-          && exists(bookingPath(request.resource.data.bookingId))
-          && get(bookingPath(request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
-          && get(bookingPath(request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
-          && get(bookingPath(request.resource.data.bookingId)).data.bookingReference == request.resource.data.bookingReference
+          && exists(bookingPath(orgId, request.resource.data.bookingId))
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.pastorId == request.resource.data.pastorId
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.visitorName == request.resource.data.visitorName
+          && get(bookingPath(orgId, request.resource.data.bookingId)).data.bookingReference == request.resource.data.bookingReference
           && (
             (
               request.resource.data.action == 'requested'
               && request.resource.data.actor == 'visitor'
-              && get(bookingPath(request.resource.data.bookingId)).data.status == 'pending'
+              && get(bookingPath(orgId, request.resource.data.bookingId)).data.status == 'pending'
             )
             || (
               request.resource.data.action in ['confirmed', 'declined']
-              && get(bookingPath(request.resource.data.bookingId)).data.status == request.resource.data.action
-              && isPastorAccount()
-              && memberData().pastorId == get(bookingPath(request.resource.data.bookingId)).data.pastorId
+              && get(bookingPath(orgId, request.resource.data.bookingId)).data.status == request.resource.data.action
               && request.resource.data.actor == emailId()
+              && (
+                (isPastorAccount(orgId) && memberData(orgId).pastorId == get(bookingPath(orgId, request.resource.data.bookingId)).data.pastorId)
+                || isSecretary(orgId)
+              )
             )
           );
         allow update, delete: if false;
       }
 
       match /members/{emailKey} {
-        allow read: if isAdmin() || (isAuthenticated() && emailKey == emailId());
-        allow create: if isAdmin()
-          && isValidMember(request.resource.data, emailKey)
-          && request.resource.data.status == 'invited'
-          && request.resource.data.uid == null
-          && request.resource.data.role in ['pastor', 'assistant_pastor', 'secretary', 'church_admin'];
-        allow update: if isAuthenticated()
-          && emailKey == emailId()
-          && resource.data.uid == null
-          && resource.data.email == emailId()
-          && request.resource.data.uid == request.auth.uid
-          && request.resource.data.status == 'active'
-          && isValidMember(request.resource.data, emailKey)
-          && areImmutableFieldsUnchanged(['email', 'name', 'role', 'pastorId']);
+        allow read: if isAdmin(orgId) || (isAuthenticated() && emailKey == emailId()) || isPlatformAdmin();
+        allow create: if isBootstrapAdmin(orgId, emailKey)
+          || (
+            managesChurch(orgId)
+            && isValidMember(orgId, request.resource.data, emailKey)
+            && request.resource.data.status == 'invited'
+            && request.resource.data.uid == null
+            && request.resource.data.role in ['pastor', 'assistant_pastor', 'secretary', 'church_admin']
+          );
+        allow update: if (
+            isAuthenticated()
+            && emailKey == emailId()
+            && resource.data.uid == null
+            && resource.data.email == emailId()
+            && request.resource.data.uid == request.auth.uid
+            && request.resource.data.status == 'active'
+            && isValidMember(orgId, request.resource.data, emailKey)
+            && areImmutableFieldsUnchanged(['email', 'name', 'role', 'pastorId'])
+          ) || canRenameOwnProfile(orgId, emailKey);
         allow delete: if false;
       }
+    }
+
+    match /directory/{emailKey} {
+      allow get: if isAuthenticated() && emailKey == emailId();
+      allow list: if false;
+      allow create: if canCreateDirectory(emailKey);
+      allow update, delete: if false;
     }
 
     match /{document=**} {

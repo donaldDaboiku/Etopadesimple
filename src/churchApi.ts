@@ -9,6 +9,7 @@ import {
   runTransaction,
   serverTimestamp,
   setDoc,
+  writeBatch,
   Timestamp,
   updateDoc,
   where,
@@ -358,6 +359,15 @@ async function readMember(orgId: string, email: string, user: User): Promise<Sta
   }
 }
 
+export async function updateOwnName(orgId: string, name: string): Promise<{ error: string } | { name: string }> {
+  const clean = name.trim()
+  if (clean.length < 2 || clean.length > 120) return { error: 'Enter your name.' }
+  const email = auth.currentUser?.email ? staffEmailKey(auth.currentUser.email) : ''
+  if (!email) return { error: 'Sign in again, then update your name.' }
+  await updateDoc(doc(db, 'organisations', orgId, 'members', email), { name: clean })
+  return { name: clean }
+}
+
 export async function loadAccount(user: User): Promise<StaffAccount | null> {
   const email = user.email ? staffEmailKey(user.email) : ''
   if (!email) return null
@@ -420,10 +430,19 @@ export async function registerChurch(input: ChurchSignup) {
     return { error: 'invalid' as const }
   }
   try {
-    // ponytail: a second organisation document can be created before the directory write lands. The member path still accepts only this email as church_admin. Upgrade path: a create-once signup lock document.
-    await setDoc(doc(db, 'organisations', orgId), { name: input.churchName.trim(), adminEmail: email })
-    await setDoc(doc(db, 'organisations', orgId, 'members', email), member)
-    await setDoc(doc(db, 'directory', email), { organisationId: orgId })
+    const authEmail = user.email ? staffEmailKey(user.email) : ''
+    if (authEmail !== email) throw new Error('email')
+    // Rules call getAfter on the org, the first member, and the directory together.
+    await runTransaction(db, async (transaction) => {
+      transaction.set(doc(db, 'organisations', orgId), {
+        name: input.churchName.trim(),
+        adminEmail: email,
+        creatorUid: user.uid,
+        claimed: true,
+      })
+      transaction.set(doc(db, 'organisations', orgId, 'members', email), member)
+      transaction.set(doc(db, 'directory', email), { organisationId: orgId })
+    })
   } catch {
     await deleteSignedInUser().catch(() => undefined)
     await signOutStaff().catch(() => undefined)
@@ -481,7 +500,8 @@ export async function createStaff(orgId: string, invite: StaffInvite) {
     })
     await setDoc(doc(db, 'organisations', orgId, 'availability', pastorId), defaultSchedule())
   }
-  await setDoc(memberRef, {
+  const batch = writeBatch(db)
+  batch.set(memberRef, {
     email,
     name: invite.name.trim(),
     role: invite.role,
@@ -489,6 +509,7 @@ export async function createStaff(orgId: string, invite: StaffInvite) {
     uid: null,
     status: 'invited',
   })
-  if (orgId !== CHURCH_ID) await setDoc(doc(db, 'directory', email), { organisationId: orgId })
+  if (orgId !== CHURCH_ID) batch.set(doc(db, 'directory', email), { organisationId: orgId })
+  await batch.commit()
   return { email }
 }

@@ -4,7 +4,6 @@ import { visitorBooking } from '../auth'
 import { defaultSchedule, monthKey, shiftMonth, slotsOn, type WeekSchedule } from '../availability'
 import { createBooking, listOpenSlotKeys, listPastors, listSchedules } from '../churchApi'
 import { formatLongDate, formatTime } from '../format'
-import { navigate } from '../usePath'
 import { useStaffSession } from '../useStaffSession'
 import { Field } from '../Field'
 import { MonthCalendar } from '../MonthCalendar'
@@ -120,10 +119,6 @@ export function BookingPage() {
   })
   const [monthCursor, setMonthCursor] = useState(cursor)
   const { draft, confirmation, notice } = session
-
-  useEffect(() => {
-    if (ready && account && !visitorBooking(account.role)) navigate('/dashboard')
-  }, [ready, account])
 
   useEffect(() => {
     if (!ready) return

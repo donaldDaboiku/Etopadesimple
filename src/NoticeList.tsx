@@ -2,7 +2,15 @@ import { useEffect, useState } from 'react'
 import { listNotices, listSeenNoticeIds, markNoticeRead, type NoticeItem } from './churchApi'
 import { noticeText, unseenIds } from './notices'
 
-export function NoticeList({ organisationId, pastorId }: { organisationId: string; pastorId: string | null }) {
+export function NoticeList({
+  organisationId,
+  pastorId,
+  title = 'Notifications',
+}: {
+  organisationId: string
+  pastorId: string | null
+  title?: string
+}) {
   const [items, setItems] = useState<NoticeItem[]>([])
   const [error, setError] = useState('')
 
@@ -28,9 +36,9 @@ export function NoticeList({ organisationId, pastorId }: { organisationId: strin
   if (items.length === 0 && !error) return null
 
   return (
-    <section className="card notice-card" aria-label="Notifications">
+    <section className="card notice-card" aria-label={title}>
       <div className="section-header">
-        <h2>Notifications</h2>
+        <h2>{title}</h2>
         {items.length > 0 ? <span className="badge badge-pending">{items.length} new</span> : null}
       </div>
       {error ? (

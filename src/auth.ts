@@ -32,7 +32,7 @@ export function pastorDashboard(role: string | null | undefined) {
 }
 
 export function visitorBooking(role: string | null | undefined) {
-  return role !== 'secretary'
+  return role == null || role === 'secretary'
 }
 
 export function reportView(role: string | null | undefined): 'own' | 'church' | null {

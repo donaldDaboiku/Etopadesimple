@@ -2,9 +2,12 @@ import { initializeApp, getApps } from 'firebase/app'
 import {
   connectAuthEmulator,
   createUserWithEmailAndPassword,
+  EmailAuthProvider,
   getAuth,
+  reauthenticateWithCredential,
   signInWithEmailAndPassword,
   signOut,
+  updatePassword,
 } from 'firebase/auth'
 import { connectFirestoreEmulator, getFirestore } from 'firebase/firestore'
 
@@ -40,6 +43,16 @@ function authCode(error: unknown) {
 
 export async function signInWithPassword(email: string, password: string) {
   await signInWithEmailAndPassword(auth, email.trim().toLowerCase(), password)
+}
+
+export async function changeOwnPassword(currentPassword: string, nextPassword: string) {
+  const user = auth.currentUser
+  const email = user?.email
+  if (!user || !email) {
+    throw Object.assign(new Error('Sign in again, then change your password.'), { code: 'auth/requires-recent-login' })
+  }
+  await reauthenticateWithCredential(user, EmailAuthProvider.credential(email, currentPassword))
+  await updatePassword(user, nextPassword)
 }
 
 export async function signUpWithPassword(email: string, password: string) {

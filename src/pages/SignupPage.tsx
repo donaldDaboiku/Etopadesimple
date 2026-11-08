@@ -45,7 +45,7 @@ export function SignupPage() {
     setBusy(true)
     try {
       const saved = await registerChurch(form)
-      if ('error' in saved) {
+      if ('error' in saved && saved.error) {
         setFormError(formErrors[saved.error])
         return
       }

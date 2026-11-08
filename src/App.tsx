@@ -1,11 +1,10 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import './App.css'
 import { AppLink } from './AppLink'
-import { visitorBooking } from './auth'
 import { initials } from './format'
 import { MissingPage } from './pages/MissingPage'
 import { OverviewPage } from './pages/OverviewPage'
-import { pageTitle } from './route'
+import { headerLinks, pageTitle, signedInDestination } from './route'
 import { signOutStaff } from './firebaseApp'
 import { navigate, usePath } from './usePath'
 import { useStaffSession } from './useStaffSession'
@@ -17,6 +16,8 @@ const PastorsPage = lazy(() => import('./pages/PastorsPage').then((module) => ({
 const ReportsPage = lazy(() => import('./pages/ReportsPage').then((module) => ({ default: module.ReportsPage })))
 const AdminPage = lazy(() => import('./pages/AdminPage').then((module) => ({ default: module.AdminPage })))
 const SignupPage = lazy(() => import('./pages/SignupPage').then((module) => ({ default: module.SignupPage })))
+const RequestsPage = lazy(() => import('./pages/RequestsPage').then((module) => ({ default: module.RequestsPage })))
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then((module) => ({ default: module.SettingsPage })))
 
 const pages = {
   '/': OverviewPage,
@@ -24,6 +25,8 @@ const pages = {
   '/pastors': PastorsPage,
   '/reports': ReportsPage,
   '/dashboard': DashboardPage,
+  '/requests': RequestsPage,
+  '/settings': SettingsPage,
   '/admin': AdminPage,
   '/login': LoginPage,
   '/signup': SignupPage,
@@ -36,7 +39,8 @@ function App() {
   const [menuPath, setMenuPath] = useState<string | null>(null)
   const menuOpen = menuPath === path
   const Page = pages[path as keyof typeof pages]
-  const showDashboard = path !== '/login' && Boolean(account)
+  const destination = ready && account ? signedInDestination(account.role, path) : null
+  const links = ready ? headerLinks(account?.role) : []
 
   async function logOut() {
     setSignOutError('')
@@ -46,8 +50,12 @@ function App() {
       setSignOutError('Sign-out did not finish. You are still signed in.')
       return
     }
-    if (path === '/reports' || path === '/dashboard' || path === '/admin') navigate('/')
+    if (path !== '/' && path !== '/booking' && path !== '/pastors' && path !== '/login' && path !== '/signup') navigate('/')
   }
+
+  useEffect(() => {
+    if (destination) navigate(destination)
+  }, [destination])
 
   useEffect(() => {
     const title = pageTitle(path)
@@ -61,7 +69,7 @@ function App() {
         Skip to content
       </a>
       <header className="topbar">
-        <AppLink className="brand" to="/">
+        <AppLink className="brand" to={account ? '/dashboard' : '/'}>
           <img className="brand-mark" src="/logo.png" alt="ETOPADE" width={42} height={42} />
           <span className="brand-copy">
             <span>ETOPADE</span>
@@ -80,13 +88,14 @@ function App() {
         </button>
 
         <nav id="main-menu" className={menuOpen ? 'main-nav is-open' : 'main-nav'} aria-label="Main navigation">
-          <AppLink to="/">Overview</AppLink>
-          {visitorBooking(account?.role) ? <AppLink to="/booking">Booking</AppLink> : null}
-          <AppLink to="/pastors">Pastors</AppLink>
-          {showDashboard ? <AppLink to="/dashboard">Dashboard</AppLink> : null}
+          {links.map((link) => (
+            <AppLink key={link.href} to={link.href}>
+              {link.label}
+            </AppLink>
+          ))}
         </nav>
 
-        {ready && account ? (
+        {!ready ? null : account ? (
           <div className="session-box">
             <span className="avatar" aria-hidden="true">
               {initials(account.name)}
@@ -99,9 +108,14 @@ function App() {
             </button>
           </div>
         ) : (
-          <AppLink className="primary-button btn-sm staff-login" to="/login">
-            Staff log in
-          </AppLink>
+          <div className="session-box">
+            <AppLink className="secondary-button btn-sm" to="/signup">
+              Admin
+            </AppLink>
+            <AppLink className="primary-button btn-sm" to="/login">
+              Staff log in
+            </AppLink>
+          </div>
         )}
       </header>
       {signOutError ? (
@@ -112,7 +126,7 @@ function App() {
 
       <main id="main" className="page" tabIndex={-1}>
         <Suspense fallback={<p className="auth-copy">Loading...</p>}>
-          {Page ? <Page /> : <MissingPage />}
+          {destination ? <p className="auth-copy">Loading...</p> : Page ? <Page /> : <MissingPage />}
         </Suspense>
       </main>
       <footer className="site-footer">

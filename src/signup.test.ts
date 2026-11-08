@@ -27,6 +27,16 @@ test('church signup checks the form and the first admin is never a super admin',
     confirmPassword: 'other-secret',
   })
   assert.equal(errors.churchName, 'Enter the church name.')
+  assert.equal(
+    validateChurchSignup({
+      churchName: '',
+      adminName: 'Ada Mensah',
+      email: 'ada@hope.example',
+      password: 'chapel-pass',
+      confirmPassword: 'chapel-pass',
+    }).churchName,
+    'Enter the church name.',
+  )
   assert.equal(errors.adminName, 'Enter your name.')
   assert.equal(errors.email, 'Enter a valid email address.')
   assert.equal(errors.password, 'Use at least 6 characters.')
